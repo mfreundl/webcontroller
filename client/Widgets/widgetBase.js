@@ -30,59 +30,37 @@ function widgetBase(config)
   this.title = "widgetBase";
   /** Short description/help text for widget */
   this.description = "Widget classes should overwrite title/description";
-  /** Current view mode, see handleViewButtonPress() */
-  this.viewmode = (config.viewmode)? config.viewmode : 0;
-  
-  /** the contentObject has been implemented to let the widgets append information to it which should be stored during the save process */
-  this.contentObject = new Object();
-  
-  if(config.type)
-  {
-    this.type = config.type;
-  }
-  
-  /** myDiv points to the view of the widget which is appended to the working desk (#mainContainer) and made resizeable as well as draggable */
-  this.myDiv = $('<div class="widget ' + this.type + ' view_top'+ this.viewmode + '" style=""></div>')
-              .appendTo(that.mainPointer.desktopHandle)
-              .draggable()
-              .resizable();
-              
-  // in the following the content object is processed
-  if(config.pos)
-  {
-    this.myDiv.css("top", config.pos.top).css("left", config.pos.left);
-  }
-  if(config.size)
-  {
-    this.myDiv.css("width", config.size.width).css("height", config.size.height);
-  }
-  if(config.content)  //make the stored information available to the widgets' content object
-  {
-    this.content = config.content;
-  }
-  
-  
-  /** every widget has an headingDiv which displays the widget's type/name as well
-  as the set button which reflects the properties of the widget's content object in an editable dialog */            
-  var headingDiv = $('<div id="title"></div>').appendTo(this.myDiv);          
-  var btnDiv = $('<div id="buttons"></div>').appendTo(headingDiv);
-  
-  $("<button class='fa fa-gear' title='settings' />")
-                  .click(handleSetButtonPress)
-                  .appendTo(btnDiv);        
-  $("<button class='fa fa-eye' title='Toggle view modes' />")
-                  .click(handleViewButtonPress)
-                  .appendTo(btnDiv);
-  $("<h2>"+this.type+"</h2>")
-                  .appendTo(headingDiv);
+  /** For throttling; @todo should become an option */
+  this.throttle_ms = 100;
+  /** Events - define in backbone style */
+  this.events = { "click #btn_settings": "handleSetButtonPress",
+      "click #btn_viewmodes": "handleViewButtonPress",
+      "mouseover #btn_viewmodes": function(a,b) { $("#btn_viewmodes").css('backgroundColor', 'red'); },
+      "mouseout #btn_viewmodes": function(a,b) {
+        $("#btn_viewmodes").css('backgroundColor', 'blue'); }
+  };
+  /** HTML template for widget, used with _.template */
+  this.template = "<div class='widget <%= type %> view_top<%= viewmode %>' style='position: absolute;'>\
+    <div id='title'><h2><%= title %></h2>\
+    <div id='buttons'>\
+      <button id='btn_settings' class='fa fa-gear' title='Settings' />\
+      <% if (show_viewmodes) { %> <button id='btn_viewmodes' class='fa fa-eye' title='Toggle view modes' /><% } %>\
+    </div>\
+  </div>\
+  <div id='content' style=''><div id='help' ><%= help %></div>\
+  </div>";
 
-  /* Div for the content */
-  this.contentDiv = $('<div id="content" style=""/>').appendTo(this.myDiv);
-
-
-  /** every widget has its own handle to the ROS system. the handle is activated here. */
-  this.myRosHandle = this.getMyRosHandle(localStorage.lastIP);
-
+  
+  /** Configuration object which contains geometry information and maybe saved values from a recent session */
+  //config object must be deep copied to the widgets so that the config objects which are bound to the load-list-entries are not modified when working with the widgets.
+  //otherwise clicking the same load-list-entry after adding or deleting entries of a widget will not restore the state before changing it because the reference to the config object was changed.
+  var clonedConfig = {};
+  $.extend(true, clonedConfig, config);
+  this.config = clonedConfig;
+  if (!_.has(this.config, "options"))
+    this.config.options = Object();
+  // this.config.options = _.defaults(this.config.options, { throttle_ms: 100 });
+   
   /**
    * if not overriden in the junior widgets, the main application will call this basic method of cleanMeUp on removing
    * which only results in closing the ROS handle.
@@ -95,6 +73,153 @@ function widgetBase(config)
     console.log("cleanupBase");
     this.myRosHandle.close();
     //tidy up any objects that have been created
+  }
+  
+  /**
+   * sleep() is called when the when the widget is dragged, this function has to be overridden in the spezific widget class.
+   * this function is intended to disable gui and save performance while dragging a widget.
+   * @method
+   */
+  this.sleep = function()
+  {
+  }
+  
+  /**
+   * this is the counterpart of the sleep() function
+   * @method
+   */
+  this.wakeMeUp = function()
+  {
+  }
+  
+  /**
+   * this method is called by main to trigger the creation of the widgetBase class.
+   * here the root div of every widget is created and modified according to the right geometry and drag options.
+   * furthermore the content and the heading div is appended to the root div.
+   * @method
+   */
+  this.createBase = function()
+  {
+    /** @todo How to handle default values here / in widget*/
+    if (that.viewmode == undefined)
+      that.viewmode = 0;
+    /** Default throttling for topics (in ms) @todo implement in widgets! */
+    that.config.options.throttle = 100;
+  
+    /** the contentObject has been implemented to let the widgets append information to it which should be stored during the save process */
+    this.contentObject = new Object();
+    
+    if(that.config.type)
+    {
+      this.type = that.config.type;
+    }
+
+    /** every widget has its own handle to the ROS system. the handle is activated here. */
+    that.myRosHandle = that.getMyRosHandle(localStorage.lastIP);
+  
+    /**  Prepare GUI elements */
+    var help = $('#'+this.type, that.mainPointer.help_text).parent().nextUntil(":header");
+    help = $('<div/>').append(help).html();
+
+    // Build the widget div
+    this.myDiv = $(_.template(this.template, { title: this.title, type: this.type, help: help,
+      viewmode: that.viewmode, show_viewmodes: this.use_viewmodes > 0 }));
+    this.contentDiv = $('#content', this.myDiv);
+    // Register events
+    this.delegateEvents(this.events, this.myDiv);
+    this.setupUI(that.myDiv);
+    // Attach to DOM
+    that.myDiv.appendTo(that.mainPointer.desktopHandle);
+    
+    
+    // processing geometry information                                
+    if(that.config.pos)
+    {
+      this.myDiv.css("top", that.config.pos.top).css("left", that.config.pos.left);
+    }
+    if(that.config.size)
+    {
+      this.myDiv.css("width", that.config.size.width).css("height", that.config.size.height);
+    }
+  }
+
+  this.setupUI = function(div_obj)
+  {
+    div_obj.draggable({helper: "original",
+                            distance: 10,
+                            start: function()
+                                    {
+                                      $(this).addClass("dragWidgetClass");
+                                      that.sleep();
+                                      $.each($(this)[0].children, function(key, val)
+                                        {
+                                          $(val).hide();
+                                        })
+                                    },
+                            stop: function()
+                                    {
+                                      $(this).removeClass("dragWidgetClass");
+                                      that.wakeMeUp();
+                                      $.each($(this)[0].children, function(key, val)
+                                        {
+                                          $(val).show();
+                                        })
+                                    }})
+                  .resizable({start: function()
+                                    {
+                                      $(this).addClass("dragWidgetClass");
+                                      that.sleep();
+                                      $.each($(this)[0].children, function(key, val)
+                                        {
+                                          $(val).hide();
+                                        })
+                                    },
+                            stop: function()
+                                    {
+                                      $(this).removeClass("dragWidgetClass");
+                                      that.wakeMeUp();
+                                      $.each($(this)[0].children, function(key, val)
+                                        {
+                                          $(val).show();
+                                        })
+                                    }});
+  }
+  
+  /**
+   * this method is triggered by main to create the specific widgets after the base was created.
+   * this method has to be overwritten in the child widget classes.
+   * @method
+   */
+  this.createWidget = function()
+  {
+    console.log("PARENT");
+  }
+  
+  /**
+   * this method is firstly called by loadMe() after the widgets have been created.
+   * it looks at the item list of a widget and renders the entries if there are any.
+   * this method has to be overwritten in the child widget class.
+   * @method
+   */
+  this.render = function()
+  {
+  }
+  
+  /**
+   * this method is called by main after the base and child widgets have been created.
+   * this method makes the stored information/properties (if there is any) available to the widgets' contentObject
+   * finally render() is called to let the widgets display their stored content...
+   * @method
+   */
+  this.loadMe = function()
+  {
+    if(that.config.content)
+    {
+      that.contentObject = that.config.content;
+    }
+    
+    that.render(); 
+    
   }
   
   /**
@@ -119,16 +244,16 @@ function widgetBase(config)
    * it calls a shared method that will reflect all the properties of the widget's content object in an editable dialog.
    * @method
    */
-  function handleSetButtonPress()
+  this.handleSetButtonPress = function ()
   {
     that.reflectMyPropertiesInDialogBox(that.contentObject, that.myDiv);
   }
   
   /** Toggle between viewmodes by adding class view_main1,... to myDiv. Child elements with class view<N> are only shown in view N by CSS rules. */
-  function handleViewButtonPress()
+  this.handleViewButtonPress = function()
   {
       that.viewmode += 1;
-      if (that.viewmode > 2)
+      if (!that.use_viewmodes || that.viewmode >= that.use_viewmodes)
           that.viewmode = 0;
       that.myDiv.removeClass('view_top0').removeClass('view_top1').removeClass('view_top2');
       that.myDiv.addClass('view_top'+that.viewmode);

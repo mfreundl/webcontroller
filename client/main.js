@@ -16,8 +16,14 @@ function main() {
   */
   var that = this;
   
-  //this.widgetArr = new Array();
-    
+  /** global sharedMethods Object to get access to its methods from main
+  *@type {sharedMethods}
+  */
+  var sM = new sharedMethods();
+  
+  that.interrupted = false;
+  /** Help text is loaded by ajax from README.html which is generated offline from README.md */
+  that.help_text = "";
   
   /**
   *Creates an instance of an object that represents an ROS element in the menubar
@@ -51,22 +57,193 @@ function main() {
     this.draggable = false;
   }
 
-
-  /** this method creates a global instance of ROSLIBJS, registers two eventhandlers to ROSLIBJS and tries to establish a connection to the ROS system by invoking connectToRos().
-  *@method
-  */
-  /*this.initialize = function()
-  {
-    //addEventListener('touchmove', function(e) { e.preventDefault(); }, false);    //disable scrolling and zooming on touch devices
-    ros = new ROSLIB.Ros();
-    ros.onAny(function(event){if(event.type == "error"){handleErrorEvent();}else if(event.type == "open"){handleConnectEvent();}});
-    connectToRos();
-  }
-  */
   
-  /** checks if there is an IP address in the local storage and connects. if no ip present, askForIP() is called.
+
+  /** start of program, registers some event handlers, appends the top level lists to the menu containers
   *@method
   */
+  this.initialize = function()
+  {
+    //register some event handlers
+  
+    //needed for touch devices
+    $(document).delegate('input', 'click', function(){$(this).focus();});
+    $(document).delegate('button', 'click', function(){$(this).focus();});
+    
+    //event handler for notification box
+    $(document).delegate($(document), 'notMsg', function(e){
+                                                  //var color = (e.color ? e.color : "black"); 
+                                                  var d = new Date(e.timeStamp)
+                                                  var time = "["+d.getHours()+":"+d.getMinutes()+":"+d.getSeconds()+"] ";
+                                                  //var span = $("<span></span>").css("color", color).html(time+e.msg+"\n");
+                                                  //span.prependTo("#notBox");
+                                                  $("#notBox").html(time+e.msg+"\n"+$("#notBox").html());
+                                                });
+  
+    $('<ul id="menuNode"></ul>').appendTo('#nodeContainer');
+    $('<ul id="menuTopic"></ul>').appendTo('#topicContainer');
+    $('<ul id="menuService"></ul>').appendTo('#serviceContainer');
+    $('<ul id="menuParam"></ul>').appendTo('#paramContainer');
+    $('<ul id="menuWidget"></ul>').appendTo('#widgetContainer');
+    
+    listWidgets();
+    
+    createControlElements();
+    
+    createNotificationBox();
+
+    handleDesktops("init");
+    
+    /** Load a JSON string from hash in URL */
+    if (location.hash.substr(0,1) == '#') {
+        var str = location.hash.substr(1);
+        //wait a short time to let the menus be filled und configured before recreating them during the next load
+        window.setTimeout(function(){loadFromStorage(undefined, str);}, 1000)
+    }
+
+    // Load documentation
+    $.ajax("README.html", {dataType: "html", success: function (data) { that.help_text = data; } })
+  }
+  
+  
+  /** this method handles further desktops. it also cares that only the widgets on the current desktops will be saved.
+  *desktophandles contain a div element which is made sensitive to entries of the widget section of the drop-down-menu.
+  *the desktopCounter helps to distinguish between the desktops and their corresponding widgetArrays.
+  *@param {string} action - the method will create a new desktop or switch between existing desktops or delete the current desktop according to the action string
+  *@method
+  */ 
+  function handleDesktops(action)
+  {
+    switch(action)
+    {
+      case "init":
+        { 
+          desktopCounter = 0;
+          that.desktopList = [];
+          that.widgetArr = [];
+          that.widgetArr[desktopCounter] = [];
+          that.desktopList[desktopCounter] = that.desktopHandle = $("<div class='desktopContainer'></div>").appendTo($("#siteContent"))
+                                                                                                            .droppable({
+                                                                                                               accept:'#menuWidget li',
+                                                                                                               drop:handleDropEvent,
+                                                                                                               hoverClass:'hovered'
+                                                                                                            });
+          connectToRos();
+          
+        }
+        break;
+      case "next":
+        {
+          if(that.desktopList.length == desktopCounter + 1)
+          {
+            $(document).trigger({type:'notMsg', msg:'new desktop created.'});
+            that.desktopList[desktopCounter].hide();
+            that.desktopHandle.data("name",that.desktop.val());
+            that.desktop.val("");
+            ++desktopCounter;
+            that.widgetArr[desktopCounter] = [];
+            that.desktopList[desktopCounter] = that.desktopHandle = $("<div class='desktopContainer'></div>").appendTo($("#siteContent"))
+                                                                                                              .droppable({
+                                                                                                                 accept:'#menuWidget li',
+                                                                                                                 drop:handleDropEvent,
+                                                                                                                 hoverClass:'hovered'
+                                                                                                              });
+            connectToRos(); 
+          }
+          else
+          {
+            that.desktopHandle.data("name",that.desktop.val())
+            ++desktopCounter;
+            that.desktopHandle.hide()
+            that.desktopHandle = that.desktopList[desktopCounter];
+            that.desktopList[desktopCounter].show();
+            that.desktop.val(that.desktopHandle.data("name"));
+            that.desktopHandle.appendTo($("body"));
+            that.refreshMenu(that.desktopHandle.data("ros"));
+            that.connectionMenuInput.val(that.desktopHandle.data("ip"));
+            localStorage.lastIP = that.desktopHandle.data("ip");
+            $(document).trigger({type:'notMsg', msg:'switched to next desktop "'+that.desktop.val()+'".'});
+          } 
+          
+        }
+        break;
+      case "prev":
+        {
+          if(desktopCounter == 0)
+          {
+            $(document).trigger({type:'notMsg', msg:'that is already the first desktop.'});
+            return;
+          }
+          that.desktopHandle.data("name",that.desktop.val())
+          --desktopCounter;
+          that.desktopHandle.hide();
+          that.desktopHandle = that.desktopList[desktopCounter];
+          that.desktopList[desktopCounter].show();
+          that.desktop.val(that.desktopHandle.data("name"));
+          that.desktopHandle.appendTo($("body"));
+          that.refreshMenu(that.desktopHandle.data("ros"));
+          that.connectionMenuInput.val(that.desktopHandle.data("ip"));
+          localStorage.lastIP = that.desktopHandle.data("ip");
+          $(document).trigger({type:'notMsg', msg:'switched to previous desktop "'+that.desktop.val()+'".'});
+        }
+        break;
+      case "delete":
+        {
+          if(that.desktopList.length < 2)
+          {
+            $(document).trigger({type:'notMsg', msg:'last remaining desktop can not be deleted.'});
+            return;
+          }
+          $(document).trigger({type:'notMsg', msg:'desktop "'+that.desktop.val()+'" deleted.'});
+          
+          //delete all the widgets of the desktop and also all their ros handles
+          $.each(that.widgetArr[desktopCounter], function(key, widget){
+            if(widget !== undefined)  //warum erste bedingung?
+            {
+              widget.cleanMeUp();
+              widget.myDiv.remove();
+            }
+          });
+          
+          //delete the ros handle of the desktop
+          that.desktopList[desktopCounter].data("ros").close();
+          
+          
+          delete that.desktopList[desktopCounter];
+          var tempList = [];
+          var count = 0;
+          $.each(that.desktopList, function(key, value){
+            if(value !== undefined)
+            {
+              tempList[count] = value;
+              ++count;
+            }
+            else
+            {
+              desktopCounter = (key == 0 ? 0: (key - 1)); 
+            }
+          });
+          that.desktopList = tempList;
+          that.desktopHandle.remove();
+          that.desktopHandle = that.desktopList[desktopCounter];
+          that.desktopList[desktopCounter].show();
+          that.desktop.val(that.desktopHandle.data("name"));
+          that.desktopHandle.appendTo($("body"));
+          that.refreshMenu(that.desktopHandle.data("ros"));
+          that.connectionMenuInput.val(that.desktopHandle.data("ip"));
+        }
+        break;
+      default:
+        //nothing to do
+        break;
+    }
+  }
+  
+  
+  /** this method establishes a connection to the remote system. first it makes sure that an active roshandle is closed before a new one is created. the order of ip addresses which are tried to connect to is: 1. ip given as argument, 2. ip contained in the input box of the connect menu, 3. ip contained in the local storage... after trying to connect two events could happen which will be handled by the two event handlers.
+   *@param {string} ip - ip address to connect to, if not given other possibilities are tried  
+   *@method
+   */
   function connectToRos(ip)
   {
     try
@@ -77,31 +254,24 @@ function main() {
     {
       console.log(e);
     }
-    ip = (ip !== undefined ? ip : (that.connMenuInput.val() != "" ? that.connMenuInput.val() : localStorage.lastIP));
-    that.connMenuInput.val(ip);
+    ip = (ip !== undefined ? ip : (that.connectionMenuInput.val() != "" ? that.connectionMenuInput.val() : localStorage.lastIP));
+    that.connectionMenuInput.val(ip);
     var ros = new ROSLIB.Ros();
     ros.onAny(function(event){if(event.type == "error"){handleErrorEvent(ip);}else if(event.type == "open"){handleConnectEvent(ip);}});
     ros.connect("ws://"+ip);
-    //window.setTimeout(function(){console.log(obj); }, 1000);
     
-      /** if connecting results in an error event, this method is called requesting a valid IP address
+      /** if connecting results in an error event, this method is called telling that there is a connection problem
       *@method
       */
       function handleErrorEvent(ip)
       {
-        //that.connMenuInput.val("");
-        that.connectButton.css("color", "red");
-        $("div", that.connectButton).removeClass("fa-spin");
-        //that.connectButton.attr("disabled", "disabled");
-        //that.connMenuContent.toggle();
+        that.connectionMenuBtn.css("color", "red");
+        $("div", that.connectionMenuBtn).removeClass("fa-spin");
         delete localStorage.lastIP;
-        console.log("wrong ip")
-        //connectToRos();
-        //callback(undefined);
+        $(document).trigger({type:'notMsg', msg:"ip is wrong or rosbridge not running on target system."});
       }
       
-      /** if connecting results in an open event, this method is called and continues
-      *with the program by calling fillMainView().
+      /** if connecting results in an open event, this method is called and continues with setting important variables and calling refreshMenu()
       *@method
       */
       function handleConnectEvent(ip)
@@ -111,20 +281,20 @@ function main() {
         that.desktopHandle.data("ip", ip);
         localStorage.lastIP = ip;
         that.refreshMenu(ros);
-        //that.connMenuInput.val(ip);
+        $(document).trigger({type:'notMsg', msg:"connected to '"+ip+"'."});
       }
   }
   
   function testConnection(cb_result)
   {
-      //console.log(that.desktopHandle.data("ros"))
+      //TODO: untersuchen ob dieser fall überhaupt noch eintreten kann
       if(!that.desktopHandle.data("ros"))
       {
-        console.log("connection failed");
+        $(document).trigger({type:'notMsg', msg:"no ros handle for '"+that.desktopHandle.data('ip')+"' obtained."});
         window.clearInterval(that.interval);
         return;
       }
-      var testService  = new ROSLIB.Service({
+      testService  = new ROSLIB.Service({
       ros : that.desktopHandle.data("ros"),
       name : '/rosapi/get_time',
       serviceType : '/rosapi/GetTime'
@@ -140,70 +310,236 @@ function main() {
   
   function connectionBroken()
   {
-    that.connectButton.css("color", "red");
-    $("div", that.connectButton).removeClass("fa-spin");
-    //that.connectButton.attr("disabled", "disabled");
+    that.interrupted = true;
+    $(document).trigger({type:'notMsg', msg:"connection to '"+that.desktopHandle.data('ip')+"' broken."});
+    that.connectionMenuBtn.css("color", "red");
+    $("div", that.connectionMenuBtn).removeClass("fa-spin");
+    //that.connectionMenuBtn.attr("disabled", "disabled");
     window.clearInterval(that.interval);
   }
   
-  /*function changeConnection(ip)
+
+  /**this method destroys the menu, requests the current available ROS elements on the system, implements the nested and chained structure and transforms them back to the jQueryUI menu.
+  *it also handles the timers which make use of method testConnection to identify a broken connection an call the appropriate method.
+  *@param {ROSLIB.Ros} ros - the ros handle
+  *@method
+  */  
+  this.refreshMenu = function(ros)
   {
+     
+     if(!ros)
+     {
+       return;
+     }
+     
+      try
+      {
+        window.clearTimeout(that.countDown);
+        window.clearInterval(that.interval);
+      }
+      catch(exception)
+      {
+        console.log(exception);
+      }
+      that.countDown = window.setTimeout(function(){connectionBroken();}, 2000);  
+      that.interval = window.setInterval(function(){testConnection(
+        function(result){
+          if(that.interrupted)
+          {
+            connectToRos();
+          }
+          that.interrupted = false;
+          try{window.clearTimeout(that.countDown);}
+          catch(exception){console.log(exception);};
+          that.connectionMenuBtn.css("color", "green");
+          $("div", that.connectionMenuBtn).removeClass("fa-spin");
+          that.countDown = window.setTimeout(function(){connectionBroken();}, 2000);});},
+      1000);
+    that.connectionMenuBtn.css("color", "black");
+    $("div", that.connectionMenuBtn).addClass("fa-spin");
     try
     {
-      ros.close();
+      $('#menuNode').menu("destroy");
+      $('#menuNode').empty();
+      $('#menuTopic').menu("destroy");
+      $('#menuTopic').empty();
+      $('#menuService').menu("destroy");
+      $('#menuService').empty();
+      $('#menuParam').menu("destroy");
+      $('#menuParam').empty();
     }
-    catch(e)
+    catch(exception)
     {
-      console.log(e);
+      console.log(exception)
     }
-    connectToRos(ip);
-  }*/
-  
-  /** appends the top level lists to the menu containers, 
-  *makes the working desk as well as the deleter sensitive to draggable elements and define their drop handlers,
-  *gathers the available ROS elements with the help of the ROSLIBJS object and triggers the creation of the menu
-  *@method
-  */
-  this.initialize = function()
-  {
-  
-    $('<ul id="menuNode"></ul>').appendTo('#nodeContainer');
-    $('<ul id="menuTopic"></ul>').appendTo('#topicContainer');
-    $('<ul id="menuService"></ul>').appendTo('#serviceContainer');
-    $('<ul id="menuParam"></ul>').appendTo('#paramContainer');
-    $('<ul id="menuWidget"></ul>').appendTo('#widgetContainer');
-    
-    //$("#deleter").droppable({
-      //drop:handleDropEventDelete,
-      //tolerance:"touch",
-      //hoverClass:'hovered'
-    //});
-    
-    listWidgets();
-    
-    createControlElements();
-    handleDesktops("init");
-    
-    /*ros.getTopics(function(topics){
-      listTopics(topics);
-      ros.getServices(function(services){
-        listServices(services);
-        ros.getParams(function(params){
-          listParams(params);
-          getNodes(function(nodes){
-            listNodes(nodes);
-            makeMenu();
+        
+      ros.getTopics(function(topics){
+        listTopics(topics);
+        ros.getServices(function(services){
+          listServices(services);
+          ros.getParams(function(params){
+            listParams(params);
+            getNodes(ros, function(nodes){
+              listNodes(nodes);
+              makeMenu();
+              //window.setTimeout(function() {makeMenu();}, 3000);
+            });
           });
         });
       });
-    });*/
-    
-    /** Load a JSON string from hash in URL */
-    //if (location.hash.substr(0,1) == '#') {
-    //    var str = location.hash.substr(1);
-    //    that.loadFromStorage(str);
-    //}
   }
+
+  function createNotificationBox()
+  {
+    var notBoxContainer = $("<div</div>").addClass("notificationBox").appendTo("#siteContent");
+    $("<div>NotificationBox</div>").appendTo(notBoxContainer).addClass("notBoxHead").click(function(){
+                                                                                                if(notBoxContainer.css("height") == "20px")
+                                                                                                {
+                                                                                                  notBoxContainer.animate({height:"200px"});
+                                                                                                  textBox.toggle();
+                                                                                                }
+                                                                                                else
+                                                                                                {
+                                                                                                  notBoxContainer.animate({height:"20px"});
+                                                                                                  textBox.toggle();
+                                                                                                }
+                                                                                              });
+    var textBox = $("<textarea id='notBox' readonly></textarea>").appendTo(notBoxContainer);
+  }
+
+
+   /** this method makes menu entries that belong to the '.i_am_draggable' class draggable and transforms the columns into a jQueryUI menu.
+   *@method
+   */ 
+   function makeMenu()
+   { 
+
+     $( ".i_am_draggable" ).draggable({
+            helper: function() {return $(this).clone().zIndex(10).css('width', this.offsetWidth)[0];},
+            cursor:'move',
+            revert:true
+            //snap:'#drop'
+            //drag:handleDragEvent
+          });
+     $( ".i_am_draggable a" ).css('font-weight', 'bold');
+     $( "#menuNode li").data("type", "Node");
+     $( "#menuTopic li").data("type", "Topic");
+     $( "#menuService li").data("type", "Service");
+     $( "#menuParam li").data("type", "Param");
+     $( "#menuNode" ).menu();
+     $( "#menuTopic" ).menu();
+     $( "#menuService" ).menu();
+     $( "#menuParam" ).menu();
+   }
+
+
+
+
+  /** this method creates the necessary elements such as buttons or input boxes to control the application
+  *@param {string} currentDesktop - the name of the desktop
+  *@param {string} connectionMenuInputVal - the address the client is connected to
+  *@method
+  */ 
+  function createControlElements(currentDesktop, connectionMenuInputVal)
+  {
+
+    var ctrlBoxTemplate = _.template('<div>' +
+                                      '<div id="connectionMenu" style="float:left;">' +
+                                        '<button id="connectionMenuBtn" title="click to refresh menu, green means connected, red not"><div class="fa fa-refresh"></div></button>' +
+                                        '<div id="connectionMenuContent"><a href="#"><input id="connectionMenuInput" value="<%= address %>" placeholder="ip:port" type="text"><button class="fa fa-check" title="change"></button></a></div>' +
+                                      '</div>' +
+                                      '<input id="desktop" style="float:left;" value="<%= desktopName %>" title="Desktop name; must consist of the following characters: a-z, A-Z, 0-9 and _" type="text" placeholder="[Desktopname]">' +
+                                      '<button id="saveBtn" class="fa fa-save" style="float:left;" title="Save current configuration under the current desktop name"></button>' +
+                                      '<div id="loadMenu" style="float:left;"><button class="fa fa-folder-open" title="Load"></button><ul id="loadMenuContent" style="position:absolute;"></ul></div>' +
+                                      '<button id="prevBtn" class="fa fa-arrow-left" style="float:left;" title="previous desktop"></button>' +
+                                      '<button id="nextBtn" class="fa fa-arrow-right" style="float:left;" title="next/new desktop"></button>' +
+                                      '<button id="trashBtn" class="fa fa-trash-o" title="drag widgets/elements here to delete them, clicking deletes current desktop"></button>' +                          
+                                    '</div>');
+    
+    var events = {"click #connectionMenuBtn": function(){if($("#connectionMenuBtn").css("color") == "rgb(255, 0, 0)"){$("#connectionMenuContent button").click();}else{that.refreshMenu(that.desktopList[desktopCounter].data("ros"));} createControlElements(that.desktop.val(), that.connectionMenuInput.val());},
+                  "click #connectionMenuContent button": function(){connectToRos();},
+                  "change #desktop": function(){var pattern = new RegExp("^([a-zA-Z0-9_])*$");if(that.desktop.val() != "" && pattern.test(that.desktop.val()) == false){alert("wrong chars in desktop name!");}},
+                  "click #saveBtn": function(){saveToStorage();},
+                  "click #prevBtn": function(){handleDesktops("prev");},
+                  "click #nextBtn": function(){handleDesktops("next");},
+                  "click #trashBtn": function(){handleDesktops("delete");}}
+    
+    //compile template, create controlBox
+    $("#controlBox").undelegate().empty().append(ctrlBoxTemplate({address: (connectionMenuInputVal ? connectionMenuInputVal : ""), desktopName: (currentDesktop ? currentDesktop : "")}));
+    //register Events
+    sM.delegateEvents(events, $("#controlBox"));
+    
+    //export important control elements to mainApp
+    that.connectionMenuBtn = $("#connectionMenuBtn");
+    that.connectionMenuInput = $("#connectionMenuInput");
+    that.desktop = $("#desktop");
+    
+    //make trash bin droppable
+    $("#trashBtn").droppable({
+                      drop:handleDropEventDelete,
+                      accept:".widget, .im_a_save, .deleteableEntry",
+                      tolerance:"touch",
+                      hoverClass:'hovered' 
+                  });
+    
+    //create list entries for server saves
+    var menuContent = $("#loadMenuContent");
+    $('<a href="#">Server Storage</a>').appendTo($('<li class="ui-state-disabled"></li>').appendTo(menuContent));
+    var jqXHR = $.post('./cgi-bin/load.py', "json");//end cgi-call
+    
+    jqXHR.fail(function()
+          {
+            $(document).trigger({type: 'notMsg', msg: 'error while obtaining the save entries from the server'})
+            
+          })
+         .done(function(data)
+          {
+                  var serverSaveObject = $.parseJSON(data);
+                  
+                  $.each(serverSaveObject, function(key, desktopObj){
+                      if(desktopObj !== undefined) //warum?
+                      {
+                        var d = new Date(desktopObj.stamp);
+                        $('<a href="#">'+desktopObj.desktop+' - '+d.toLocaleString()+'</a>').appendTo($('<li></li>').draggable({
+                                                                                                          cursor:'move',
+                                                                                                          revert:true
+                                                                                                        })
+                                                                                            .attr('class', 'im_a_save')
+                                                                                            .data('object', desktopObj)
+                                                                                            .data('server_or_client','server')
+                                                                                            .click(function(){loadFromStorage(this)})
+                                                                                            .appendTo(menuContent));
+                      }
+                  });
+                
+                //the following code is still in the callback section of the cgi-call to make sure that the server save entries are obtained before creating the menu()
+                
+                //create list entries for local saves
+                $('<a href="#">Local Saves</a>').appendTo($('<li class="ui-state-disabled"></li>').appendTo(menuContent));
+                if(localStorage.mySave !== undefined)
+                {
+                  //read localStorage to get available saves
+                  var localSaveObject = eval("(" + localStorage.mySave + ")");
+                  $.each(localSaveObject, function(key, desktopObj){
+                    if(desktopObj !== undefined) //warum?
+                    {
+                      var d = new Date(desktopObj.stamp);
+                      $('<a href="#">'+desktopObj.desktop+' - '+d.toLocaleString()+'</a>').appendTo($('<li></li>').draggable({
+                                                                                                        cursor:'move',
+                                                                                                        revert:true
+                                                                                                      })
+                                                                                          .attr('class', 'im_a_save')
+                                                                                          .data('object', desktopObj)
+                                                                                          .data('server_or_client','client')
+                                                                                          .click(function(){loadFromStorage(this)})
+                                                                                          .appendTo(menuContent));
+                    }
+                  });
+              }
+            menuContent.menu();
+          });
+  }
+
 
   /**takes the sorted and chained menuNode-objects and appends the entries to the right menu columns. the nested structure is implemented by creating different hierarchical levels of HTML lists. the list elements get an id attribute corresponding to their stringSoFar in order to let the children know where to append. the function is called recursivly until every chain of the inputted list reaches its end.   
   *@param {menuNodes[]} nodesOfSameLevel - this list contains the chained menu entries created during the processes of zerlegen() and sortMenuNodes()
@@ -290,9 +626,7 @@ function main() {
             {
               nodesOfSameLevel[i].draggable = true;
             }
-            console.log("i: "+i+" a: "+a+" "+nodesOfSameLevel[i].name+" "+nodesOfSameLevel[a].name);
             nodesOfSameLevel[i].childList.push(nodesOfSameLevel[a].childList[0]);
-            ////console.log("removed: "+nodesOfSameLevel.splice(a, 1));
             nodesOfSameLevel[a] = undefined;
           }
         }
@@ -333,22 +667,22 @@ function main() {
     
     var request = new ROSLIB.ServiceRequest({
     });
-    
+   
+   /**
+   * the callback of getNodes()
+   * @param {string[]} listOfNodes - the list of nodes
+   * @callback main~cb_nodes
+   */
     srvNodes.callService(request, function(result) {
     
       cb_nodes(result.nodes);
     });
   }
   
-  /**
-   * the callback of getNodes()
-   * @param {string[]} listOfNodes - the list of nodes
-   * @callback main~cb_nodes
-   */
   
   
  /** this method lists the available widgets in the fifth column of the menu. 
- *new widgets have to be registered here. the type of the widget will be appended in order to find out which widget has been dropped on the working desk. at last the entries are made draggable and the column is transformed into a jQueryUI menu
+ *the entries are made draggable and the column is transformed into a jQueryUI menu
  *@method
  */ 
  function listWidgets()
@@ -372,340 +706,13 @@ function main() {
    $("#menuWidget").menu();
  }
   
- /** this method makes menu entries that belong to the '.i_am_draggable' class draggable and transforms the columns into a jQueryUI menu.
- *@method
- */ 
- function makeMenu()
- { 
-
-   $( ".i_am_draggable" ).draggable({
-          helper: function() {return $(this).clone().zIndex(10).css('width', this.offsetWidth)[0];},
-          cursor:'move',
-          revert:true
-          //snap:'#drop'
-          //drag:handleDragEvent
-        });
-   $( ".i_am_draggable a" ).css('font-weight', 'bold');
-   $( "#menuNode li").data("type", "Node");
-   $( "#menuTopic li").data("type", "Topic");
-   $( "#menuService li").data("type", "Service");
-   $( "#menuParam li").data("type", "Param");
-   $( "#menuNode" ).menu();
-   $( "#menuTopic" ).menu();
-   $( "#menuService" ).menu();
-   $( "#menuParam" ).menu();
- }
-
-
-/** this method handles further desktops. it also cares that only the widgets on the current desktops will be saved.
-*@param {string} action - the method will create a new desktop or switch between existing desktops according to the action
-*@method
-*/ 
-function handleDesktops(action)
-{
-  switch(action)
-  {
-    case "init":
-      { 
-        desktopCounter = 0;
-        that.desktopList = [];
-        that.widgetArr = [];
-        //that.desktopNames = [];
-        that.widgetArr[desktopCounter] = [];
-        that.desktopList[desktopCounter] = that.desktopHandle = $("<div class='desktopContainer'></div>").appendTo($("#siteContent"))
-                                                                                                          .droppable({
-                                                                                                             accept:'#menuWidget li',
-                                                                                                             drop:handleDropEvent,
-                                                                                                             hoverClass:'hovered'
-                                                                                                          });
-        connectToRos();
-        
-      }
-      break;
-    case "next":
-      {
-        if(that.desktopList.length == desktopCounter + 1)
-        {
-          console.log("creating new desktop");
-          that.desktopList[desktopCounter].hide();
-          that.desktopHandle.data("name",that.desktop.val());
-          that.desktop.val("");
-          ++desktopCounter;
-          that.widgetArr[desktopCounter] = [];
-          //desktopHandle.remove();
-          that.desktopList[desktopCounter] = that.desktopHandle = $("<div class='desktopContainer'></div>").appendTo($("#siteContent"))
-                                                                                                            .droppable({
-                                                                                                               accept:'#menuWidget li',
-                                                                                                               drop:handleDropEvent,
-                                                                                                               hoverClass:'hovered'
-                                                                                                            });
-          connectToRos(); 
-        }
-        else
-        {
-          console.log("switching to next desktop");
-          //that.desktopNames[desktopCounter] = desktop.val();
-          that.desktopHandle.data("name",that.desktop.val())
-          ++desktopCounter;
-          that.desktopHandle.hide()
-          that.desktopHandle = that.desktopList[desktopCounter];
-          that.desktopList[desktopCounter].show();
-          that.desktop.val(that.desktopHandle.data("name"));
-          that.desktopHandle.appendTo($("body"));
-          that.refreshMenu(that.desktopHandle.data("ros"));
-          that.connMenuInput.val(that.desktopHandle.data("ip"));
-          localStorage.lastIP = that.desktopHandle.data("ip");
-        } 
-        
-      }
-      break;
-    case "prev":
-      {
-        if(desktopCounter == 0)
-        {
-          console.log("already first desktop");
-          return;
-        }
-        console.log("switching to previous desktop");
-        //that.desktopNames[desktopCounter] = desktop.val();
-        that.desktopHandle.data("name",that.desktop.val())
-        --desktopCounter;
-        that.desktopHandle.hide();
-        that.desktopHandle = that.desktopList[desktopCounter];
-        that.desktopList[desktopCounter].show();
-        that.desktop.val(that.desktopHandle.data("name"));
-        that.desktopHandle.appendTo($("body"));
-        that.refreshMenu(that.desktopHandle.data("ros"));
-        that.connMenuInput.val(that.desktopHandle.data("ip"));
-        localStorage.lastIP = that.desktopHandle.data("ip");
-      }
-      break;
-    case "delete":
-      {
-        if(that.desktopList.length < 2)
-        {
-          console.log("last remaining desktop can not be deleted");
-          return;
-        }
-        
-        
-        //delete all the widgets of the desktop and in turn all their ros handles
-        $.each(that.widgetArr[desktopCounter], function(key, widget){
-          if(widget !== undefined)  //warum erste bedingung?
-          {
-            console.log(key);
-            widget.cleanMeUp();
-            widget.myDiv.remove();
-          }
-        });
-        
-        //delete the ros handle of the desktop
-        that.desktopList[desktopCounter].data("ros").close();
-        
-        
-        delete that.desktopList[desktopCounter];
-        var tempList = [];
-        var count = 0;
-        $.each(that.desktopList, function(key, value){
-          if(value !== undefined)
-          {
-            tempList[count] = value;
-            ++count;
-          }
-          else
-          {
-            desktopCounter = (key == 0 ? 0: (key - 1)); 
-          }
-        });
-        that.desktopList = tempList;
-        that.desktopHandle.remove();
-        that.desktopHandle = that.desktopList[desktopCounter];
-        that.desktopList[desktopCounter].show();
-        that.desktop.val(that.desktopHandle.data("name"));
-        that.desktopHandle.appendTo($("body"));
-        that.refreshMenu(that.desktopHandle.data("ros"));
-        that.connMenuInput.val(that.desktopHandle.data("ip"));
-      }
-      break;
-    default:
-      //nothing to do
-      break;
-  }
-}
 
 
 
-/** this method creates the necessary elements such as buttons or input boxes to control the application
-*@method
-*/ 
-function createControlElements(currentDesktop)
-{
 
-  //create controlBox
-  var ctrlBox = $("#controlBox");
-  ctrlBox.empty();
 
-  // Button: connect
-  var connMenu = $("<div id='connMen'></div>").appendTo(ctrlBox).css("float","left")
-  that.connectButton = $('<button id="connMenBtn" title="click to refresh menus,\ngreen when connected,\nred when not connected"><div class="fa fa-refresh"></div></button>').dblclick(function(){})
-                         .click(function(){that.refreshMenu(that.desktopList[desktopCounter].data("ros"));})
-                         .appendTo(connMenu);
-  that.connMenuContent = $('<div id="connMenContent"></div>').appendTo(connMenu)
-  that.refA = $("<a href='#'></a>").appendTo(that.connMenuContent)
-  that.connMenuInput = $('<input placeholder="ip:port" type="text">').click(function(){$(this).focus();}).appendTo(that.refA)
-  var connMenuButton = $('<button class="fa fa-check" title="change"></button>').appendTo(that.refA).click(function(){connectToRos();})
 
-  // Input box for desktop name
-  that.desktop = $('<input title="Desktop name; must consistof the following characters: a-z, A-Z, 0-9 and _" type="text" placeholder="[DesktopName]"></input>').change(function(){
-                                        var pattern = new RegExp("^([a-zA-Z0-9_])*$")
-                                        if(that.desktop.val() != "" && pattern.test(that.desktop.val()) == false)
-                                        alert("error");
-                                      })
-                                      .tooltip().css("float", "left").appendTo(ctrlBox);
-  that.desktop.val(currentDesktop ? currentDesktop : "");
 
-  // Buttons: save/load
-  $('<button style="float: left" class="fa fa-save" title="Save current configuration under the current desktop name"></button>').click(function(){saveToStorage();}).appendTo(ctrlBox);
-  var loadMenu = $("<div id='loadMen'></div>").hover(function(){if(menuContent.data("show") == 0){menuContent.show();}else{}}, function(){if(menuContent.data("show") == 0){menuContent.hide()}else{}}).appendTo(ctrlBox).css("float","left");
-
-  $('<button class="fa fa-folder-open" title="Load"></button>').click(function(){if(menuContent.data("show") == 1){ menuContent.data("show", 0);menuContent.hide() }else {menuContent.data("show", 1);menuContent.show();}}).appendTo(loadMenu);
-  var menuContent = $('<ul id="loadMenContent"></ul>').css('position', 'absolute').hide().data("show", 0).appendTo(loadMenu);
-
-  // Buttons: prev/next
-  $('<button class="fa fa-arrow-left" title="previous desktop"></button>').tooltip()
-                                                                       .css("float", "left")
-                                                                       .appendTo(ctrlBox)
-                                                                       .click(function(){handleDesktops("prev");});
-  $('<button class="fa fa-arrow-right" title="next/new desktop"></button>').tooltip()
-                                                                       .css("float", "left")
-                                                                       .appendTo(ctrlBox)
-                                                                       .click(function(){handleDesktops("next");});
-
-  // Delete Button
-  $('<button class="fa fa-trash-o" title="click to delete current desktop or drag saves to delete here"></button>').click(function(){handleDesktops("delete");})
-                                                                                    .droppable({
-                                                                                        drop:handleDropEventDelete,
-                                                                                        accept:".widget, .im_a_save",
-                                                                                        tolerance:"touch",
-                                                                                        hoverClass:'hovered' 
-                                                                                    })
-                                                                                    .appendTo(ctrlBox);
-
-  //create list entries for server saves
-  $('<a href="#">Server Storage</a>').appendTo($('<li class="ui-state-disabled"></li>').appendTo(menuContent));
-  $.get('./cgi-bin/load.py', function(data){
-    //TODO: Error handling, etc like in saveToStorage()
-    if(data.search(/errorError/) == -1)
-      var serverSaveObject = eval("(" + (data) + ")");
-      
-      $.each(serverSaveObject, function(key, desktopObj){
-          if(desktopObj !== undefined) //warum?
-          {
-            var d = new Date(desktopObj.stamp);
-            $('<a href="#">'+desktopObj.desktop+' - '+d.toLocaleString()+'</a>').appendTo($('<li></li>').draggable({
-                                                                                              cursor:'move',
-                                                                                              revert:true
-                                                                                            })
-                                                                                .attr('class', 'im_a_save')
-                                                                                .data('object', desktopObj)
-                                                                                .data('server_or_client','server')
-                                                                                .click(function(){loadFromStorage(this)})
-                                                                                .appendTo(menuContent));
-          }
-      });
-    
-    //the following code is still in the callback section of the cgi-call to make sure that the server save entries are in before creating the menu()
-    
-    //create list entries for local saves
-    $('<a href="#">Local Saves</a>').appendTo($('<li class="ui-state-disabled"></li>').appendTo(menuContent));
-    if(localStorage.mySave !== undefined)
-    {
-      //read localStorage to get available saves
-      var localSaveObject = eval("(" + localStorage.mySave + ")");
-      $.each(localSaveObject, function(key, desktopObj){
-        if(desktopObj !== undefined) //warum?
-        {
-          var d = new Date(desktopObj.stamp);
-          $('<a href="#">'+desktopObj.desktop+' - '+d.toLocaleString()+'</a>').appendTo($('<li></li>').draggable({
-                                                                                            cursor:'move',
-                                                                                            revert:true
-                                                                                          })
-                                                                              .attr('class', 'im_a_save')
-                                                                              .data('object', desktopObj)
-                                                                              .data('server_or_client','client')
-                                                                              .click(function(){loadFromStorage(this)})
-                                                                              .appendTo(menuContent));
-        }
-      });
-    }
-    menuContent.menu();
-  });//end cgi-call
-  
-}
-
-/** this method destroys the menu, requests the current available ROS elements on the system, implements the nested and chained structure and transforms them back to the jQueryUI menu.
-*@method
-*/  
-this.refreshMenu = function(ros)
-{
-   
-   if(!ros)
-   {
-     return;
-   }
-   
-    try
-    {
-      window.clearTimeout(that.countDown);
-      window.clearInterval(that.interval);
-    }
-    catch(exception)
-    {
-      console.log(exception);
-    }
-    that.countDown = window.setTimeout(function(){connectionBroken();}, 2000);  
-    that.interval = window.setInterval(function(){testConnection(
-      function(result){
-        try{window.clearTimeout(that.countDown);}
-        catch(exception){console.log(exception);};
-        that.connectButton.css("color", "green");
-        $("div", that.connectButton).removeClass("fa-spin");
-        that.countDown = window.setTimeout(function(){connectionBroken();}, 2000);});},
-    1000);
-  that.connectButton.css("color", "black");
-  $("div", that.connectButton).addClass("fa-spin");
-  //that.connectButton.removeAttr("disabled");
-  try
-  {
-    $('#menuNode').menu("destroy");
-    $('#menuNode').empty();
-    $('#menuTopic').menu("destroy");
-    $('#menuTopic').empty();
-    $('#menuService').menu("destroy");
-    $('#menuService').empty();
-    $('#menuParam').menu("destroy");
-    $('#menuParam').empty();
-  }
-  catch(exception)
-  {
-    console.log(exception)
-  }
-      
-    ros.getTopics(function(topics){
-      listTopics(topics);
-      ros.getServices(function(services){
-        listServices(services);
-        ros.getParams(function(params){
-          listParams(params);
-          getNodes(ros, function(nodes){
-            listNodes(nodes);
-            makeMenu();
-            //window.setTimeout(function() {makeMenu();}, 3000);
-          });
-        });
-      });
-    });
-}
   
   /** this methods drives the whole process of transforming the list of node strings to a nested menubar.
   *@param {string[]} nodeList - array containing the full hierarchical strings of node elements
@@ -767,110 +774,130 @@ this.refreshMenu = function(ros)
     addToMenu(sortedParamList, "menuParam");
   }
 
-/** this function is called whenever a save entry gets dropped onto the trash bin. it will remove the save entry from the load entry list and the localStorage.
-*@param {event} event - contains infos about the event
-*@param {jQueryUI} ui - contains the dropped jQueryUI object and some additional infos
-*@method
-*/  
-function deleteSaveEntry( event, ui )
-{
-  //first of all we get the desktopObject which is associated to its draggable entry...
-  var entry = ui.draggable.data('object');
 
-  //this switch case statement decides weather the entry has to be deleted from the localStorage or the server
-  switch(ui.draggable.data('server_or_client'))
+  /** this function is called when a widget or menu entry of the load section is dropped on the trash bin. it triggers the deletion process of a either an entry of the load section or of the widget.
+  *@param {event} event - contains infos about the event
+  *@param {jQueryUI} ui - contains the dropped jQueryUI object and some additional infos
+  *@method
+  */  
+  function handleDropEventDelete( event, ui )
   {
-    case 'server':
+    if(ui.draggable.hasClass("widget"))
     {
-      $.get('./cgi-bin/load.py', function(data){
-        if(data.search(/errorError/) == -1)
-        {
-          serverSaveObject = eval("(" + (data) + ")");
-          $.each(serverSaveObject, function(key, desktopObj){
-            if(desktopObj !== undefined) //warum?
-            {
-              if(desktopObj.stamp == entry.stamp && desktopObj.desktop == entry.desktop)
-              {
-                delete serverSaveObject[key];
-              }
-            }
-          });
-          $.get("./cgi-bin/save.py?JSON="+encodeURIComponent(JSON.stringify(serverSaveObject)), function(data) {
-          });
-          $(ui.draggable[0]).remove();   
-        }
-      });
-      break;
+      deleteWidget( event, ui );
     }
-    case 'client':
+    else if(ui.draggable.hasClass("im_a_save"))
     {
-      var localSaveObject = eval("(" + localStorage.mySave + ")");  
-      $.each(localSaveObject, function(key, desktopObj){
-        if(desktopObj !== undefined) //warum?
-        {
-          if(desktopObj.stamp == entry.stamp && desktopObj.desktop == entry.desktop)
+      deleteSaveEntry( event, ui);
+    } else {
+      // Call the delete handler for this object
+      $(ui.draggable.context).trigger("delete");
+    }
+  }
+
+
+  /** this function is called whenever a save entry gets dropped onto the trash bin. it will remove the save entry from the load entry list and the localStorage/serverStorage.
+  *@param {event} event - contains infos about the event
+  *@param {jQueryUI} ui - contains the dropped jQueryUI object and some additional infos
+  *@method
+  */  
+  function deleteSaveEntry( event, ui )
+  {
+    //first of all we get the desktopObject which is associated to its draggable entry...
+    var entry = ui.draggable.data('object');
+
+    //this switch case statement decides weather the entry has to be deleted from the localStorage or the server
+    switch(ui.draggable.data('server_or_client'))
+    {
+      case 'server':
+      {
+        var jqXHR = $.post('./cgi-bin/load.py', "json");
+        
+        jqXHR.fail(function(){$(document).trigger({type:'notMsg', msg:'error when requesting the server-save-files.'});})
+             .done(function(data)
+                  {
+                      serverSaveObject = $.parseJSON(data);
+                      $.each(serverSaveObject, function(key, desktopObj){
+                        if(desktopObj !== undefined) //warum?
+                        {
+                          if(desktopObj.stamp == entry.stamp && desktopObj.desktop == entry.desktop)
+                          {
+                            delete serverSaveObject[key];
+                          }
+                        }
+                      });
+                      var jqXHR = jQuery.post("./cgi-bin/save.py", {json:JSON.stringify(serverSaveObject)});
+                  
+                      jqXHR.done(function() {
+                        //alert( "second success" );
+                        $(document).trigger({type:'notMsg', msg:'deleted from server'});
+                      })
+                        .fail(function() {
+                        $(document).trigger({type:'notMsg', msg:'error when deleting entry from server.'});
+                        console.log(jqXHR);
+                      })
+                        .always(function() {
+                        //alert( "finished" );
+                      });
+                      
+                      $(ui.draggable[0]).remove();   
+                  });
+        break;
+      }
+      case 'client':
+      {
+        var localSaveObject = eval("(" + localStorage.mySave + ")");  
+        $.each(localSaveObject, function(key, desktopObj){
+          if(desktopObj !== undefined) //warum?
           {
-            delete localSaveObject[key];
+            if(desktopObj.stamp == entry.stamp && desktopObj.desktop == entry.desktop)
+            {
+              delete localSaveObject[key];
+            }
           }
-        }
-      });
+        });
 
-      localStorage.mySave = JSON.stringify(localSaveObject);
-      $(ui.draggable[0]).remove();
-      break;
+        localStorage.mySave = JSON.stringify(localSaveObject);
+        $(ui.draggable[0]).remove();
+        break;
+      }
+      default:
+        //nothing to do...
+        break;
     }
-    default:
-      //nothing to do...
-      break;
   }
-}
 
 
-function handleDropEventDelete( event, ui )
-{
-  if(ui.draggable.hasClass("widget"))
+  /** this function is called whenever a widget gets dropped onto the trash bin. it will remove the widget from the widgetArr array of the current desktop, call the widgets cleanMeUp() method and remove the container of the widget from the DOM of the website.
+  *@param {event} event - contains infos about the event
+  *@param {jQueryUI} ui - contains the dropped jQueryUI object and some additional infos
+  *@method
+  */  
+  function deleteWidget( event, ui )
   {
-    deleteWidget( event, ui );
+    $.each(that.widgetArr[desktopCounter], function(key, widget){
+      if(widget !== undefined && widget.myDiv[0] == ui.draggable[0])  //warum erste bedingung?
+      {
+        widget.cleanMeUp();
+        widget.myDiv.remove();
+        delete that.widgetArr[desktopCounter][key];
+      }
+    });
   }
-  else if(ui.draggable.hasClass("im_a_save"))
+
+
+
+  /** this function is called when a menu entry of the widget section is dropped on the working desk. it triggers the loading process of a widget.
+  *@param {event} event - contains infos about the event
+  *@param {jQueryUI} ui - contains the dropped jQueryUI object and some additional infos
+  *@method
+  */  
+  function handleDropEvent( event, ui )
   {
-    deleteSaveEntry( event, ui);
+    loadWidget({"type":ui.draggable.data('widgetType'), "pos": {"top": ui.offset.top - 67, "left": ui.offset.left}});
   }
-}
-
-
-/** this function is called whenever a widget gets dropped onto the deleter. it will remove the widget from the widgetArr array, call the widgets cleanMeUp() method and remove the container of the widget from the DOM of the website.
-*@param {event} event - contains infos about the event
-*@param {jQueryUI} ui - contains the dropped jQueryUI object and some additional infos
-*@method
-*/  
-function deleteWidget( event, ui )
-{
-  $.each(that.widgetArr[desktopCounter], function(key, widget){
-    if(widget !== undefined && widget.myDiv[0] == ui.draggable[0])  //warum erste bedingung?
-    {
-      console.log(key);
-      widget.cleanMeUp();
-      widget.myDiv.remove();
-      delete that.widgetArr[desktopCounter][key];
-      console.log(that.widgetArr[desktopCounter]);
-    }
-  });
-}
-
-
-
-/** this function is called when a menu entry of the widget section is dropped on the working desk. it triggers the loading process of a widget.
-*@param {event} event - contains infos about the event
-*@param {jQueryUI} ui - contains the dropped jQueryUI object and some additional infos
-*@method
-*/  
-function handleDropEvent( event, ui )
-{
-  loadWidget({"type":ui.draggable.data('widgetType'), "pos": {"top": ui.offset.top - 67, "left": ui.offset.left}});
-}
   
-  /** creates a string in order to instantiate a specific widget and manage inheritance by setting up its prototype chain. the type of the widget is contained in the config object. depending on the type the created strings are different and they have to be executed by the eval() method as they can not be hard coded. the widget object will get appended to the widgetArr array. 
+  /** creates a string in order to instantiate a specific widget and manage inheritance by setting up its prototype chain. the type of the widget is contained in the config object. depending on the type the created strings are different and they have to be executed by the eval() method as they can not be hard coded. the widget object will get appended to the widgetArr array of the current desktop. 
   *@param {Object} config - contains required infos like type and geometry
   *@method
   */
@@ -891,19 +918,27 @@ function handleDropEvent( event, ui )
     config.mainPointer = that;
 
     var obj = eval("(new "+config.type+"Object(config))");
+    obj.createBase();
+    obj.createWidget();
+    obj.loadMe();
     
-    //widgetDiv.data("object", obj);
     that.widgetArr[desktopCounter].push(obj);
   }
  
-  /** loads the exported saves from the local storage. cleaning up the desk before loading.
+  /** loads the exported saves from the dataObject which has been appended to every entry of the load menu during initialization. cleaning up the desk before loading.
   *@method
-  *@param {config_string} JSON-string for the current state; if undefined, take from localstorage
+  *@param {jQuery{}} listEntry - the list entry as jQueryObject to obtain the dataObject to load
   */
-  function loadFromStorage(listEntry)
+  function loadFromStorage(listEntry, JSONString)
   {
-
-    var desktopObj = $(listEntry).data('object');
+    if(listEntry)
+    {
+      var desktopObj = $(listEntry).data('object');
+    }
+    else
+    {
+      var desktopObj = $.parseJSON(JSONString);
+    }
     
     localStorage.lastIP = desktopObj.ip;
     connectToRos(desktopObj.ip);
@@ -911,27 +946,20 @@ function handleDropEvent( event, ui )
     $.each(that.widgetArr[desktopCounter], function(key, widget){  //clean up the dash
       if(widget !== undefined)  //why?
       {
-        console.log(key);
         widget.cleanMeUp();
         widget.myDiv.remove();
         delete that.widgetArr[desktopCounter][key];
-        console.log(that.widgetArr[desktopCounter]);
       }
     });
     that.widgetArr[desktopCounter] = [];
     
-    //if (config_string === undefined)
-    //    config_string = localStorage.mySave;
-  
-    //console.log(config_string);        //read the stored JSON string
-    //var object = eval("(" + config_string + ")");
     that.desktop.val(desktopObj.desktop);
     $.each(desktopObj.storageObject, function(key, config){     //load the stored widgets of the string
       loadWidget(config);
     });
   }
   
-  /** saves the current state of the application to the local storage. Every displayed widget will be polled to receive the specific storage object. The storage objects will be grouped into one big object which is going to be serialized to an JSON string that will be stored to the local storage.
+  /** saves the current state of the application to the local storage. Every displayed widget will be polled to receive its specific storage object. The storage objects will be grouped into one big object which belongs to the current desktop. This object is serialized to an JSON string that will be stored to the local storage and server storage.
   *@method
   */
   function saveToStorage()
@@ -959,63 +987,69 @@ function handleDropEvent( event, ui )
     //determine the number of saves which are stored on the server
     var ServerStorageObject = {};
     var numberOfServerSaves = 0;
-    $.get('./cgi-bin/load.py', function(data){
-      if(data.search(/errorError/) == -1)
-      {
-        try {
-        //TODO: Kein eval; json-parse oder so          
-        ServerStorageObject = eval("(" + (data) + ")");
-        $.each(ServerStorageObject, function(key, desktopObj){
-          if(desktopObj !== undefined) //warum?
-          {
-            ++numberOfServerSaves;
-          }
-        });
-        } catch (e) { console.log(e);//TODO: Error report
-        }
-      }
-      else
-      {
-        numberOfServerSaves = 0;
-      }
-      
-      //the following is still in the callback section of the cgi-call to make sure the server object is loaded and analyzed...
-      
-      //update the local and server storage objects
-      var time = new Date();
-      if(that.desktop.val() === '')
-      {
-        alert("Enter a desktop name and press save to store a configuration. The stored configurations will appear by pressing the load button. The entries can be removed by dragging them onto the trash bin.")
-        return;
-      }
+    var jqXHR_load = $.get('./cgi-bin/load.py', "json");
+    jqXHR_load.fail(function(){$(document).trigger({type:'notMsg', msg:'error when requesting the server-save-files.'});})
+         .done(function(data){
+                try
+                {   
+                  ServerStorageObject = $.parseJSON(data);
+                  $.each(ServerStorageObject, function(key, desktopObj){
+                    if(desktopObj !== undefined) //warum?
+                    {
+                      ++numberOfServerSaves;
+                    }
+                  });
+                }
+                catch (e)
+                {
+                  console.log(e);//TODO: Error report
+                }
+              
+              //the following is still in the callback section of the cgi-call to make sure the server object is loaded and analyzed...
+              
+              //update the local and server storage objects
+              var time = new Date();
+              if(that.desktop.val() === '')
+              {
+                alert("Enter a desktop name and press save to store a configuration. The stored configurations will appear by pressing the load button. The entries can be removed by dragging them onto the trash bin.")
+                return;
+              }
 
-      var desktopObj = {stamp:time.getTime(),
-                        desktop:that.desktop.val(),
-                        ip:that.desktopHandle.data("ip")};
+              var desktopObj = {stamp:time.getTime(),
+                                desktop:that.desktop.val(),
+                                ip:that.desktopHandle.data("ip")};
 
-      var index = 0;
-      var storageObject = new Object();
-      $.each(that.widgetArr[desktopCounter], function(key, widget){
-        if(widget !== undefined) //warum?
-        {
-          storageObject[index] = widget.saveMe();
-          ++index;
-        }
+              var index = 0;
+              var storageObject = new Object();
+              $.each(that.widgetArr[desktopCounter], function(key, widget){
+                if(widget !== undefined) //warum?
+                {
+                  storageObject[index] = widget.saveMe();
+                  ++index;
+                }
       });
-      console.log(storageObject);
 
       desktopObj.storageObject = storageObject;
 
       LocalStorageObject[numberOfLocalSaves] = desktopObj;
       ServerStorageObject[numberOfServerSaves] = desktopObj;
+      console.log(JSON.stringify(desktopObj)); // For copying from console
 
       localStorage.mySave = JSON.stringify(LocalStorageObject);
+      
+      var jqXHR_save = jQuery.post("./cgi-bin/save.py", {json:JSON.stringify(ServerStorageObject)});
+      
+      jqXHR_save.done(function() {
+        $(document).trigger({type:'notMsg', msg:'saved.'});
+      })
+        .fail(function() {
+        $(document).trigger({type:'notMsg', msg:'error when saving.'});
+        console.log(jqXHR);
+      })
+        .always(function() {
+      });
 
-      $.get("./cgi-bin/save.py?JSON="+encodeURIComponent(JSON.stringify(ServerStorageObject)), function(data) {
-        console.log(data);
-      }); 
-
-      createControlElements(that.desktop.val());
+      createControlElements(that.desktop.val(), that.desktopHandle.data("ip"));
     });//end cgi-call  
   }
 }

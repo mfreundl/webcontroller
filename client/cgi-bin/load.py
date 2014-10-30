@@ -19,9 +19,12 @@ try:
   print("{")    
   for a in range(0, len(match)):
     f = open(str("./saves/")+str(match[a]), 'r');
+    content = f.read();
+    if(content == ''):
+      continue;
     if(a != 0):
       print(",");
-    print(str(a)+":"+f.read());
+    print('"'+str(a)+'"'+":"+content);
     f.close();
   print("}");  
 

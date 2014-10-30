@@ -298,7 +298,7 @@ function sharedMethods()
    */  
   this.reflectMyPropertiesInDialogBox = function(storageObject, widgetsDiv)
   {
-  console.log(storageObject);
+  //console.log(storageObject);
   var root = $("<div title='Properties'></div>").appendTo("body");
   recursion(storageObject, root);
   window.setTimeout(function(){$.each(root.find("li .properties"), function(key, val){$(val).toggle();}); root.dialog({ position: { my: "center", at: "right top", of: widgetsDiv } });}, 1000);
@@ -333,13 +333,78 @@ function sharedMethods()
     {
       //we do not change the obj itself (as this is a primitive datatype now) but its parentObj[prop] which is the same. the advantage is that javascript does not copy whole objects but give their reference.
       //so when we change reference[property], the values are directly changed in the object we reflected.
-      $("<input type='text' value='"+obj+"'></input>").appendTo($("<div class='val'></div>").appendTo(parentList))
-      .change(function(){parentObj[prop] = $(this).val(); $(this).css("background", "green");});
+      var oval;
+      if (_.isBoolean(obj)) {
+        oval = $("<input type='checkbox' "+ ((obj)? "checked":"") +" />")
+        .change(function(){parentObj[prop] = $(this).prop('checked'); $(this).css("background", "green");});
+      } else {
+        oval =  $("<input type='text' value='"+obj+"'></input>")
+        .change(function(){parentObj[prop] = $(this).val(); $(this).css("background", "green");});
+      }
+      oval.appendTo($("<div class='val'></div>").appendTo(parentList));
       return true;
     }
   }
   }
-  
+
+  /** @summary Flattens a hierachic object. Returns an array of "<level1>.<level2>.<index> = value" 
+   *  @param ignore Array of field names which should be ignored
+   *  Source: https://gist.github.com/penguinboy/762197
+   */
+  this.flattenObject = function (ob, ignore) {
+    var toReturn = {};
+    if (ignore == undefined) ignore = [];
+    for (var i in ob) {
+      if ($.inArray(i, ignore) > -1) continue;
+      if (!ob.hasOwnProperty(i)) continue;
+      
+      if ((typeof ob[i]) == 'object') {
+        var flatObject = this.flattenObject(ob[i], ignore);
+        for (var x in flatObject) {
+          if (!flatObject.hasOwnProperty(x)) continue;
+          
+          toReturn[i + '.' + x] = flatObject[x];
+        }
+      } else {
+        toReturn[i] = ob[i];
+      }
+    }
+    return toReturn;
+  };
+
+  /** @summary Formats a number x with the given precison either as %f or %e */
+  this.formatNumber = function(x, precision) {
+    var x_ = Math.abs(x);
+    if (x_ < Math.pow(10, precision) && x_ > Math.pow(10, -precision/2)) {
+      var places = (1 + Math.floor(Math.log(x_) / Math.log(10)));
+      if (places < 0) places = 0
+      return sprintf("%."+ (precision-places) +"f", x);
+    } else if (x_ < 1e-13)
+      return sprintf("%."+ (precision-1) +"f", 0);
+    else
+      return sprintf("%."+(precision-1)+"e", x);
+  };
+
+  /** @summary Registers evnts defined in backbone style. Function taken from backbone. */
+  this.delegateEvents = function(events, dom_obj) {
+      //this.undelegateEvents();
+      for (var key in events) {
+        var method = events[key];
+        if (!_.isFunction(method)) method = this[events[key]];
+        if (!method) continue;
+
+        var match = key.match(/^(\S+)\s*(.*)$/);
+        var eventName = match[1], selector = match[2];
+        method = _.bind(method, this);
+        //eventName += '.delegateEvents' + this.cid;
+        if (selector === '') {
+          dom_obj.on(eventName, method);
+        } else {
+          dom_obj.on(eventName, selector, method);
+        }
+      }
+    }
+
   /**
    * this method returns a handle to the ROS system
    * @param {string} ip - the ip address of the ROS system

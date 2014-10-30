@@ -23,23 +23,30 @@ function imageWidgetObject(config)
   this.title = "Images";
   this.description = "Display image streams";
 
-
-  this.myDiv.droppable({
+  /**
+   * called by main to trigger the creation of the image widget.
+   * necessary variables are initialized and further processing of the div is done
+   * @method
+   */  
+  this.createWidget = function()
+  {
+    that.myDiv.droppable({
       accept:'#menuTopic li',
       drop:handleDropTopic,
       hoverClass:'hovered'
     })
   
-  //that.imgDiv = $('<div style="height:100%; overflow: auto; width:100%;"></div>').appendTo(that.myDiv);
-  
-  that.contentObject.topic = "";
-  var port = (window.location.port)? (parseInt(window.location.port) + 1) : 8889;
-  that.contentObject.mjpeg_server = "http://" + window.location.hostname + ":" + port;
-  that.contentObject.options = new Object({"width":"", "height":"", "quality": ""});
-  loadMe(config.content);
-  
-  this.timeoutId = 0;
-  this.myDiv.on("resize", function(event, ui) { if (this.timeoutId>0) clearTimeout(this.timeoutId); this.timeoutId = setTimeout(createStream, 500); } );
+    //that.imgDiv = $('<div style="height:100%; overflow: auto; width:100%;"></div>').appendTo(that.myDiv);
+    
+    that.contentObject.topic = "";
+    that.port = (window.location.port)? (parseInt(window.location.port) + 1) : 8889;
+    that.contentObject.mjpeg_server = "http://" + window.location.hostname + ":" + that.port;
+    that.contentObject.options = new Object({"width":"", "height":"", "quality": ""});
+    //loadMe(config.content);
+    
+    that.timeoutId = 0;
+    that.myDiv.on("resize", function(event, ui) { if (that.timeoutId>0) clearTimeout(that.timeoutId); that.timeoutId = setTimeout(createStream, 500); } );
+  }
   
   /**
    * cleanMeUp() is called by the main application when removing the widget.
@@ -53,6 +60,11 @@ function imageWidgetObject(config)
     that.myRosHandle.close();
   }
   
+  this.render = function()
+  {
+    createStream();
+  }
+  
   /**
    * loadMe() is called by the widget's constructor
    * if there is handed over a valid content object, the widget will restore its information.
@@ -60,22 +72,22 @@ function imageWidgetObject(config)
    * @param {Object} content - the widget's contentObject that has been saved from a previous session (if not set, the method does nothing and the widget stays empty)
    * @method
    */  
-  function loadMe(content)
-  {
-    if (!content)
-      return;
-    if(content.options)
-      for(prop in content.options)
-        that.contentObject.options[prop] = content.options[prop];
+  //function loadMe(content)
+  //{
+    //if (!content)
+      //return;
+    //if(content.options)
+      //for(prop in content.options)
+        //that.contentObject.options[prop] = content.options[prop];
     
-    if (content.mjpeg_server)
-        that.contentObject.mjpeg_server = content.mjpeg_server;
+    //if (content.mjpeg_server)
+        //that.contentObject.mjpeg_server = content.mjpeg_server;
       
-    if (content.topic) {
-        that.contentObject.topic = content.topic;
-        createStream();
-    }
-  }
+    //if (content.topic) {
+        //that.contentObject.topic = content.topic;
+        //createStream();
+    //}
+  //}
   
   /**
    * insertItems() takes the name of the topic, creates an object of aTopic and displays its view in the widget's view.

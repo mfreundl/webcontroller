@@ -45,12 +45,17 @@ After creating a widget, drag the ROS resource (e.g. topic, parameter) you like 
 The title bar shows buttons for configuration of the widget and its view mode (not supported for all widgets).
 The following widgets are currently available:
 
-### Message widget
+
+
+### Message widget<span id="messageWidget"></span>
+
 *Accepts: Any topic (images or large data not recommended)*
 
 Displays a ROS topic as text, much like `rostopic echo`.
 
-### Publisher widget
+
+
+### Publisher widget<span id="publisherWidget"></span>
 *Accepts: Any topic*
 
 Publish to a ROS topic.
@@ -58,26 +63,42 @@ The publishing frequency and toggle mode are configurable.
 Use the "view mode" button to switch to a more compact design, which is suitable for simple robot controllers.
 You can show any HTML code in the button, including images and Unicode signs.
 
-### Parameter widget
+
+
+### Parameter widget<span id="paramWidget"></span>
 *Accepts: Any parameter*
 
 Read, create, modify or clear parameters.
 
-### Service widget
+
+
+### Service widget<span id="serviceWidget"></span>
 *Accepts: Any service*
 
 Call a ROS service.
 
-### Image widget
+
+
+### Image widget<span id="imageWidget"></span>
 *Accepts: Topic of type sensor_msgs/Image*
 
 Displays images/videos using mjpeg_server. The server port must be set in the widget's configuration and defaults to the site's port +1.
 
-### Plot widget
-*Accepts: Any topic*
+
+
+### Plot widget<span id="plotWidget"></span>
+*Accepts: Any topic with numeric values*
 
 Displays a plot using the [flot](http://www.flotcharts.org/) library. Individual components of the message can be selected. Use the widget parameters to customize the plot.
 
+
+
+### Slider Widget<span id="sliderWidget"></span>
+*Accepts: Any topic with numeric values*
+
+*Viewmodes: horizontal, vertical (experimental) sliders*
+
+Visualizes numeric values of a message using sliders. When dropping a topic, sliders are created for all numeric fields. Delete sliders by dragging them to the paperbin. Range settings can be configured for per slider in the parameters. Flashing can be enabled when a message is received.
 
 
 ## More information

@@ -23,17 +23,27 @@ function messageWidgetObject(config)
   this.title = "Messages";
   this.description = "Show ROS messages";
 
-  this.myDiv.droppable({
+  
+  /**
+   * called by main to trigger the creation of the message widget.
+   * necessary variables are initialized and further processing of the div is done
+   * @method
+   */
+  this.createWidget = function()
+  {
+    this.myDiv.droppable({
       accept:'#menuTopic li',
       drop:handleDropTopicWidget,
       hoverClass:'hovered'
     })
    
   
-  var listOfTopicObjects = new Object();
-  that.contentObject.items = new Array();
-  that.contentObject.options = new Object({"formatString":"%.2f"});
-  loadMe(config.content);
+    that.listOfTopicObjects = new Object();
+    that.contentObject.items = new Array();
+    that.contentObject.options = new Object({"formatString":"%.2f"});  //default setting
+    //loadMe(config.content);
+  }
+  
   
   /**
    * cleanMeUp() is called by the main application when removing the widget.
@@ -44,7 +54,7 @@ function messageWidgetObject(config)
   {
     //write code to tidy things of this widget up before deleting its div
     console.log("done");
-    $.each(listOfTopicObjects, function(key, value){
+    $.each(that.listOfTopicObjects, function(key, value){
       handleRemoveButtonPress(value);
     });
     that.myRosHandle.close();
@@ -57,23 +67,24 @@ function messageWidgetObject(config)
    * @param {Object} content - the widget's contentObject that has been saved from a previous session (if not set, the method does nothing and the widget stays empty)
    * @method
    */  
-  function loadMe(content)
+  //function loadMe(content)
+  //{
+    //if(!content)
+    //{
+      //return;
+    //}
+    //that.contentObject.options = content.options;
+
+  //}
+  
+  this.render = function()
   {
-    if(!content)
+    if(that.contentObject)
     {
-      return;
-    }
-    that.contentObject.options = content.options;
-    var i = 0;
-    next();
-    
-    function next()
-    {
-      if(!content.items[i])
-      {
-        return;
-      }
-      insertItems(content.items[i], function(){i = i + 1; next();});
+      console.log(that.contentObject)
+      $.each(that.contentObject.items, function(key, value){
+        _.delay(insertItems, (key)*100, value, false);
+      });
     }
   }
   
@@ -87,18 +98,24 @@ function messageWidgetObject(config)
    * @param {topicWidgetObject~cb_inserted} cb_inserted - a callback signalling that the topic has been inserted
    * @method
    */  
-  function insertItems(topicString, cb_inserted)
+  function insertItems(topicString, updating, cb_inserted)
   {
     that.getTopicTypeByTopicString(that.myRosHandle, topicString, function(topicType){
       var myTopic = new aTopic(topicString, topicType);
       myTopic.m_createMe();
-      window.setTimeout(function(){myTopic.m_startSubscribe(function(){cb_inserted();});}, 100);  //warten bis object aufgebaut wurde
-      listOfTopicObjects[topicString] = myTopic;
+      //owindow.setTimeout(function(){myTopic.m_startSubscribe(function(){cb_inserted();});}, 1000);  //warten bis object aufgebaut wurde
+      _.delay(myTopic.m_startSubscribe, 1000);
+      that.listOfTopicObjects[topicString] = myTopic;
       
-      that.contentObject.items = [];
-      for(prop in listOfTopicObjects)
+      //when loading a session, we do not have to update the itemlist of contentObject, because no other item was added
+      if(!updating)
       {
-        that.contentObject.items.push(prop);
+        return;
+      }
+      that.contentObject.items = [];
+      for(prop in that.listOfTopicObjects)
+      {
+        that.contentObject.items.push(topicString);
       }
       
     });
@@ -115,11 +132,11 @@ function messageWidgetObject(config)
   function handleDropTopicWidget( event, ui )
   { 
     var draggable = ui.draggable;
-      if(listOfTopicObjects[draggable.data('value')])
+      if(that.listOfTopicObjects[draggable.data('value')])
       {
         return;
       }
-      insertItems(draggable.data('value'), function(){});
+      insertItems(draggable.data('value'), true, function(){});
   }
   
 
@@ -158,10 +175,9 @@ function messageWidgetObject(config)
      * this method is called when the aTopic object should start subscribing to its corresponding topic on the ROS system
      * @param {callback} callback - a callback indicates that the aTopic object is subscribed now
      */
-    this.m_startSubscribe = function(callback)
+    this.m_startSubscribe = function()
     {
-      var currentObj = this;
-      subscribeMe(this, function(){callback();});
+      subscribeMe(currentObj);
     }
     
   }
@@ -178,10 +194,10 @@ function messageWidgetObject(config)
   {
     obj.rosTopic.unsubscribe();
     delete obj.rosTopic;
-    delete listOfTopicObjects[obj.m_topicString];
+    delete that.listOfTopicObjects[obj.m_topicString];
     
     that.contentObject.items = [];
-    for(prop in listOfTopicObjects)
+    for(prop in that.listOfTopicObjects)
     {
       that.contentObject.items.push(prop);
     }
@@ -197,11 +213,10 @@ function messageWidgetObject(config)
    * @param {callback} callback - the subscription is signalled by a callback
    * @method
    */
-  function subscribeMe(topicObj, callback)
+  function subscribeMe(topicObj)
   {
     that.getRosTopicInstance(that.myRosHandle, topicObj.m_topicString, topicObj.m_topicType, function(myTopic){
       topicObj.rosTopic = myTopic;
-      callback();
       myTopic.subscribe(function(message){
         refreshValues(topicObj, message);
       });  
@@ -237,7 +252,7 @@ function messageWidgetObject(config)
       else
       {
         var value = "";
-        if(topicObj.m_messageDetails.fieldarraylen[i] == 0 && message[topicObj.m_messageDetails.fieldnames[i]].length)
+        if(topicObj.m_messageDetails.fieldarraylen[i] != -1 && message[topicObj.m_messageDetails.fieldnames[i]].length)
         {
           value += "["
           for(var prop in message[topicObj.m_messageDetails.fieldnames[i]])
@@ -278,8 +293,8 @@ function messageWidgetObject(config)
       {
         //console.log(mesdtls.fieldnames[i]+" ["+mesdtls.fieldtypes[i]+"]");
         var lst = $("<li></li>").appendTo(parent);
-        var type =  "["+mesdtls.fieldtypes[i] + ( mesdtls.fieldarraylen[i] == 0 ? "[]" : "" ) + "]";
-        var a = $("<a title="+type+">"+mesdtls.fieldnames[i]+": </a>").appendTo(lst).click(function(){$($(this).context.nextSibling).slideToggle()});;
+        var type =  "["+mesdtls.fieldtypes[i] + ( mesdtls.fieldarraylen[i] != -1 ? "[]" : "" ) + "]";
+        var a = $("<a title="+type+">"+mesdtls.fieldnames[i]+(mesdtls.fieldarraylen[i] != -1 ? "[]" : "")+": </a>").appendTo(lst).click(function(){$($(this).context.nextSibling).slideToggle()});;
         var span = $("<span style='background:#aaaaaa;'></span>").appendTo(a);
         topicObj[mesdtls.fieldnames[i]] = span;  //pointer auf span elemente werden dem topicObj hinzugefügt um bei refreshValues die spans zu manipulieren
         if(mesdtls.fieldtypes[i] == "time")

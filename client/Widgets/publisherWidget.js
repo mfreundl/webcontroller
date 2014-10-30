@@ -23,53 +23,55 @@ function publisherWidgetObject(config)
 
   this.title = "Topics";
   this.description = "Publish ROS Topics";
+  this.use_viewmodes = 2;
 
-
-  that.myDiv.droppable({
-      accept:'#menuTopic li',
-      drop:handleDropPublisherWidget,
-      hoverClass:'hovered'
-    });
-  
   /**
-   * a list of the currently displayed topics in the widget
-   * @type {topicObject[]}
-   */  
-  var listOfTopicObjects = new Object();
-  that.contentObject.items = new Array();
-  that.contentObject.options = {};
-  that.contentObject.options.toggle_publish = 0;
-  
+   * called by main to trigger the creation of the publisher widget.
+   * necessary variables are initialized and further processing of the div is done
+   * @method
+   */
+  this.createWidget = function()
+  {
+    that.myDiv.droppable({
+        accept:'#menuTopic li',
+        drop:handleDropPublisherWidget,
+        hoverClass:'hovered'
+      });
+    
+    /**
+     * a list of the currently displayed topics in the widget
+     * @type {topicObject[]}
+     */  
+    that.listOfTopicObjects = new Object();
+    that.contentObject.items = new Array();
+    that.contentObject.options = {};
+    that.contentObject.options.toggle_publish = 0;
+    
 
-  /** this is the top dialog of every publisherWidget where you can create your own topic to publish */ 
-  var row = $('<tr></tr>')
-            .appendTo($("<table style='width:100%; table-layout:fixed; background:#cccccc;'></table>").appendTo($("<div class='view0'></div>").appendTo(that.contentDiv)));
-  
-  /** this points to the input field of the name of the topic you create your own */          
-  var pubOwnName = $("<input title='topicName' type='text' placeholder='[topicName]'></input>")
-                   .change(function(){$(this).css("background", $(this).val() == "" ? "red" : "green")})
-                   .click(function(){$(this).focus();})
-                   .appendTo($("<td></td>").appendTo(row))
-                   .tooltip();
-                   
-  /** this points to the input field of the type of the topic you create your own */                 
-  var pubOwnType = $("<input title='topicType' type='text' placeholder='[topicType]'></input>")
-                   .change(function(){checkForCorrectTopicType(this);})
-                   .click(function(){$(this).focus();})
-                   .appendTo($("<td></td>").appendTo(row))
-                   .tooltip();
-            
-            //here we append the create button to the top row and connect it to an event handler       
-            $("<button class='fa fa-plus-circle' title='Add publisher' />")
-            .click(createOwnTopic)
-            .appendTo($("<td></td>").appendTo(row));
-  
-  //$('input').bind('click', function(){
-    //$(this).focus();
-  //});
-  
-  //loading the widget's content of a previous session if there was one
-  loadMe(config.content);
+    /** this is the top dialog of every publisherWidget where you can create your own topic to publish */ 
+    var row = $('<tr></tr>')
+              .appendTo($("<table style='width:100%; table-layout:fixed; background:#cccccc;'></table>").appendTo($("<div class='view0'></div>").appendTo(that.contentDiv)));
+    
+    /** this points to the input field of the name of the topic you create your own */          
+    that.pubOwnName = $("<input title='topicName' type='text' placeholder='[topicName]'></input>")
+                     .change(function(){$(this).css("background", $(this).val() == "" ? "red" : "green")})
+                     .appendTo($("<td></td>").appendTo(row))
+                     .tooltip();
+                     
+    /** this points to the input field of the type of the topic you create your own */                 
+    that.pubOwnType = $("<input title='topicType' type='text' placeholder='[topicType]'></input>")
+                     .change(function(){checkForCorrectTopicType(this);})
+                     .appendTo($("<td></td>").appendTo(row))
+                     .tooltip();
+              
+              //here we append the create button to the top row and connect it to an event handler       
+              $("<button class='fa fa-plus-circle' title='Add publisher' />")
+              .click(createOwnTopic)
+              .appendTo($("<td></td>").appendTo(row));
+    
+    //loading the widget's content of a previous session if there was one
+    //loadMe(config.content);
+  }
   
   /**
    * cleanMeUp() is called by the main application when removing the widget.
@@ -79,11 +81,20 @@ function publisherWidgetObject(config)
   this.cleanMeUp = function()
   {
     //write code to tidy things of this widget up before deleting its div
-    $.each(listOfTopicObjects, function(key, value){
+    $.each(that.listOfTopicObjects, function(key, value){
       handleRemoveButtonPress(value);
     });
     console.log("done");
     that.myRosHandle.close();
+  }
+  
+  this.render = function()
+  {
+    console.log(that.contentObject.items)
+    $.each(that.contentObject.items, function(key, value){
+      insertItem(value, false);
+    });
+    window.setTimeout(function(){$.each(that.myDiv.find(".publishToggle"), function(key, val){$(val).toggle();});}, 1000);
   }
   
   /**
@@ -93,17 +104,12 @@ function publisherWidgetObject(config)
    * @param {Object} content - the widget's contentObject that has been saved from a previous session (if not set, the method does nothing and the widget stays empty)
    * @method
    */  
-  function loadMe(content)
-  {
-    if(content)
-    {
-      that.contentObject.options = content.options;
-      $.each(content.items, function(key, value){
-        insertItem(value);
-      });
-      window.setTimeout(function(){$.each(that.myDiv.find(".publishToggle"), function(key, val){$(val).toggle();});}, 1000);
-    }
-  }
+  //function loadMe(content)
+  //{
+    //if(content)
+    //{
+    //}
+  //}
   
   /**
    * this is the event handler of the create button in the create own widget section
@@ -112,15 +118,15 @@ function publisherWidgetObject(config)
    */  
   function createOwnTopic()
   {
-    if(pubOwnType.data('flag') == false || pubOwnName.val() == "")
+    if(that.pubOwnType.data('flag') == false || that.pubOwnName.val() == "")
     {
       return;
     }
-    var name = pubOwnName.val();
-    var type = pubOwnType.val();
+    var name = that.pubOwnName.val();
+    var type = that.pubOwnType.val();
     
-    pubOwnName.val("").css("background", "white");
-    pubOwnType.val("").css("background", "white");
+    that.pubOwnName.val("").css("background", "white");
+    that.pubOwnType.val("").css("background", "white");
     
     that.getMessageDetailsByTopicType(that.myRosHandle, type, function(details) {  //callback wird aufgerufen falls topicType existiert
       insertItem({"string":name, "type":type});
@@ -155,7 +161,7 @@ function publisherWidgetObject(config)
   function handleDropPublisherWidget( event, ui )
   { 
     that.getTopicTypeByTopicString(that.myRosHandle, ui.draggable.data('value'), function(topicType){
-      insertItem({"string":ui.draggable.data('value'), "type":topicType});
+      insertItem({"string":ui.draggable.data('value'), "type":topicType}, true);
     });
   }
   
@@ -201,8 +207,7 @@ function publisherWidgetObject(config)
                                     currentObj.m_valuesToSave.alias = $(this).val();
                                     $(currentObj.m_pubbutton[1]).html(currentObj.m_valuesToSave.alias);
                                   })
-                                .val(currentObj.m_valuesToSave.alias).click(function(){$(this).focus();})
-
+                                .val(currentObj.m_valuesToSave.alias)
                                 .appendTo($("<td class='view0'></td>").appendTo(topRow));
       
       currentObj.m_pubRateField = $("<span></span>")
@@ -264,7 +269,7 @@ function publisherWidgetObject(config)
    *                    *valueObj (maybe from previous save) - the values of the topic entry's input fields
    * @method
    */  
-  function insertItem(content)
+  function insertItem(content, updating)
   {
       var myTopic = new topicObject(content);
       
@@ -272,8 +277,18 @@ function publisherWidgetObject(config)
         myTopic.m_rosTopic = rosTopicInstance;
         myTopic.m_createMe();
         myTopic.m_container.appendTo(that.contentDiv);
-        listOfTopicObjects[content.string] = myTopic;
-        that.contentObject.items.push(myTopic.m_valuesToSave)
+        that.listOfTopicObjects[content.string] = myTopic;
+        
+        //when loading a session, we do not have to update the itemlist of contentObject, because no other item was added
+        if(!updating)
+        {
+          return;
+        }
+        that.contentObject.items = [];
+        for(prop in that.listOfTopicObjects)
+        {
+          that.contentObject.items.push(prop.m_valuesToSave);
+        }
       });
   }
   
@@ -296,13 +311,13 @@ function publisherWidgetObject(config)
         delete obj.m_rosTopic;
     }
     
-    delete listOfTopicObjects[obj.m_valuesToSave.string];
+    delete that.listOfTopicObjects[obj.m_valuesToSave.string];
     obj.m_container.remove();
     
     that.contentObject.items = [];
-    for(prop in listOfTopicObjects)
+    for(prop in that.listOfTopicObjects)
     {
-      that.contentObject.items.push(listOfTopicObjects[prop].m_valuesToSave);	
+      that.contentObject.items.push(that.listOfTopicObjects[prop].m_valuesToSave);	
     }
   }
   
@@ -521,7 +536,6 @@ function publisherWidgetObject(config)
                   .attr('title', mesdtls.fieldtypes[i]+(mesdtls.fieldarraylen[i] == 0 ? '[]' : ''))
                   .val(mesdtls.fieldarraylen[i] == 0 ?  (savedValues ? "["+savedValues[mesdtls.fieldnames[i]] : "[")+"]" : (savedValues ? savedValues[mesdtls.fieldnames[i]] : ""))
                   .appendTo(a)
-                  .click(function(){$(this).focus();})
                   .change(function(){checkForCorrectType(this);})
                   .tooltip().data('type', currentType);
                   

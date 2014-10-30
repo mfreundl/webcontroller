@@ -22,17 +22,25 @@ function serviceWidgetObject(config)
 
   this.title = "Services";
   this.description = "Call ROS Services";
-
-  this.myDiv.droppable({
-    accept:'#menuService li',
-    drop:handleDropServiceWidget,
-    hoverClass:'hovered'
-  }); 
-   
-  var listOfServiceObjects = new Object();
-  that.contentObject.items = new Array();
   
-  loadMe(config.content);
+  /**
+   * called by main to trigger the creation of the service widget.
+   * necessary variables are initialized and further processing of the div is done
+   * @method
+   */  
+  this.createWidget = function()
+  {
+    this.myDiv.droppable({
+      accept:'#menuService li',
+      drop:handleDropServiceWidget,
+      hoverClass:'hovered'
+    }); 
+     
+    that.listOfServiceObjects = new Object();
+    that.contentObject.items = new Array();
+    
+    //loadMe(config.content);
+  }
     
   
   /**
@@ -54,16 +62,10 @@ function serviceWidgetObject(config)
    * @param {Object} content - the widget's contentObject that has been saved from a previous session (if not set, the method does nothing and the widget stays empty)
    * @method
    */  
-  function loadMe(content)
-  {
-    if(content)
-    {
-      $.each(content.items, function(key, value){
-        insertItems(value);
-      });
-      window.setTimeout(function(){$.each(that.myDiv.find(".toggleRow"), function(key, val){$(val).toggle();});}, 1000);
-    }
-  }
+  //function loadMe(content)
+  //{
+
+  //}
   
     /**
      * insertItems() takes the name of the service, creates an object of aService and displays its view in the widget's view.
@@ -74,7 +76,7 @@ function serviceWidgetObject(config)
      * @param {string} serviceString - the name of the service to display
      * @method
      */  
-  function insertItems(serviceString)
+  function insertItems(serviceString, updating)
   {
     that.getServiceTypeByServiceString(that.myRosHandle, serviceString, function(serviceType){
       that.getServiceRequestDetailsByServiceType(that.myRosHandle, serviceType, function(serviceRequestDetails){
@@ -88,20 +90,36 @@ function serviceWidgetObject(config)
           var serviceObj = new aService(serviceString, serviceType, serviceRequestDetails);
           console.log(serviceObj);
           
-          listOfServiceObjects[serviceString] = serviceObj;
-          console.log(listOfServiceObjects);
+          that.listOfServiceObjects[serviceString] = serviceObj;
+          console.log(that.listOfServiceObjects);
           //myParameter.m_container.appendTo(paramDiv);
           serviceObj.m_createMe();
           
-          that.contentObject.items = [];
-          for(prop in listOfServiceObjects)
+          //when loading a session, we do not have to update the itemlist of contentObject, because no other item was added
+          if(!updating)
           {
-            that.contentObject.items.push(prop);
+            return;
+          }
+          that.contentObject.items = [];
+          for(prop in that.listOfServiceObjects)
+          {
+            that.contentObject.items.push(serviceString);
           }
           
         });
       });
     });
+  }
+  
+  this.render = function()
+  {
+    if(that.contentObject.items)
+    {
+      $.each(that.contentObject.items, function(key, value){
+        insertItems(value, false);
+      });
+      window.setTimeout(function(){$.each(that.myDiv.find(".toggleRow"), function(key, val){$(val).toggle();});}, 1000);
+    }
   }
   
   /**
@@ -114,11 +132,11 @@ function serviceWidgetObject(config)
   function handleDropServiceWidget( event, ui )
   {
     var draggable = ui.draggable;
-    if(listOfServiceObjects[draggable.data('value')])
+    if(that.listOfServiceObjects[draggable.data('value')])
     {
       return;
     }
-    insertItems(draggable.data('value'));
+    insertItems(draggable.data('value'), true);
   }
   
   
@@ -188,7 +206,7 @@ function serviceWidgetObject(config)
       //{
         //$("<td>"+serviceRequestDetails.fieldnames[i]+"</td>").appendTo(tableRowRequestNames);
         
-        //var inputField = $("<input title='"+serviceRequestDetails.fieldtypes[i]+"' style='width:100%;' type='text' value="+serviceRequestDetails.fieldtypes[i]+">").data("id", i).change(function(){checkForCorrectType(this)}).tooltip().click(function(){$(this).focus();});
+        //var inputField = $("<input title='"+serviceRequestDetails.fieldtypes[i]+"' style='width:100%;' type='text' value="+serviceRequestDetails.fieldtypes[i]+">").data("id", i).change(function(){checkForCorrectType(this)}).tooltip();
         //this.m_requestInputFields.push(inputField);
         //inputField.appendTo($("<td></td>").appendTo(tableRowRequestInputFields));
       //}
@@ -236,8 +254,8 @@ function serviceWidgetObject(config)
         for(var i = 0; i < serviceRequestDetails.fieldnames.length; ++i)
         {
           var lst = $("<li></li>").appendTo(parent);
-          var inputField = $("<input title='"+serviceRequestDetails.fieldtypes[i]+"' style='width:100%;font:10px arial;' type='text' placeholder="+serviceRequestDetails.fieldnames[i]+">").click(function(){$(this).focus();}).appendTo($("<div class='sInputDiv'></div>").appendTo(lst))
-          //.change(function(){checkForCorrectType(this)}).tooltip().click(function(){$(this).focus();});
+          var inputField = $("<input title='"+serviceRequestDetails.fieldtypes[i]+"' style='width:100%;font:10px arial;' type='text' placeholder="+serviceRequestDetails.fieldnames[i]+">").appendTo($("<div class='sInputDiv'></div>").appendTo(lst))
+          //.change(function(){checkForCorrectType(this)}).tooltip();
           //this.m_requestInputFields.push(inputField);
           //inputField.appendTo($("<td></td>").appendTo(tableRowRequestInputFields));
         
@@ -290,8 +308,8 @@ function serviceWidgetObject(config)
         for(var i = 0; i < serviceRequestDetails.fieldnames.length; ++i)
         {
           var lst = $("<li></li>").appendTo(parent);
-          var inputField = $("<input title='"+serviceRequestDetails.fieldtypes[i]+"' style='width:100%;font:10px arial;' type='text' placeholder="+serviceRequestDetails.fieldnames[i]+" "+(serviceRequestDetails.fieldarraylen[i] == 0 ? "[]" : "")+">").click(function(){$(this).focus();}).appendTo($("<div class='sInputDiv'></div>").appendTo(lst))
-          //.change(function(){checkForCorrectType(this)}).tooltip().click(function(){$(this).focus();});
+          var inputField = $("<input title='"+serviceRequestDetails.fieldtypes[i]+"' style='width:100%;font:10px arial;' type='text' placeholder="+serviceRequestDetails.fieldnames[i]+" "+(serviceRequestDetails.fieldarraylen[i] == 0 ? "[]" : "")+">").appendTo($("<div class='sInputDiv'></div>").appendTo(lst))
+          //.change(function(){checkForCorrectType(this)}).tooltip();
           //this.m_requestInputFields.push(inputField);
           //inputField.appendTo($("<td></td>").appendTo(tableRowRequestInputFields));
         
@@ -457,10 +475,10 @@ function serviceWidgetObject(config)
   function handleRemoveButtonPress(obj)
   {
     obj.m_container.remove();
-    delete listOfServiceObjects[obj.m_serviceString];
+    delete that.listOfServiceObjects[obj.m_serviceString];
     
     that.contentObject.items = [];
-    for(prop in listOfServiceObjects)
+    for(prop in that.listOfServiceObjects)
     {
       that.contentObject.items.push(prop);
     }

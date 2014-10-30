@@ -1,0 +1,104 @@
+<h1>Webcontroller</h1>
+
+<p>Webcontroller is an HTML5-based browser application which allows to build versatile user interfaces for visualization, control and debugging of ROS systems.
+It uses and shows ROS messages, services and parameters, much like the <a href="http://wiki.ros.org/rqt">rqt-tools</a>.
+GUIs are created right in the browser by drag&amp;drop and can be saved.
+A menu bar displays the available ROS resources and widgets (see below).</p>
+
+<p>The system is based on <a href="http://wiki.ros.org/rosbridge_suite">rosbridge</a> and <a href="http://wiki.ros.org/roslibjs">roslibjs</a> for communication between ROS and the browser.
+ROS is not required on the client side - a standard HTML5 browser is sufficient to run Webcontroller, which makes it suitable for many different platforms, such as any modern tablet.</p>
+
+<h2>Running</h2>
+
+<p>A launch file <em>all.launch</em> is provided, which starts the following:</p>
+
+<ul>
+<li><a href="http://wiki.ros.org/rosbridge_server">rosbridge_server</a>: Interface to ROS based on Websocket/JSON; default port 9090.</li>
+<li><a href="http://wiki.ros.org/mjpeg_server">mjpeg_server</a>: Streams image data via HTTP; port 8889.</li>
+<li>webserver.sh: Starts a Python-based webserver for the HTML/JS files in ./client/ on port 8888. Note that these files could also be stored on the client itself. The server also provides a storage features in cgi-bin/save.py and load.py.</li>
+<li>open-browser.sh: Opens the default browser to show Webcontroller. If you want to run Webcontroller on a different machine, point its browser to e.g. http://robot:8888.</li>
+</ul>
+
+<h2>Desktop</h2>
+
+<p>An empty "desktop" area is shown in the browser when you open Webcontroller. The menu bar on top allows to connect to ROS and create your GUI. The following functionality is provided:</p>
+
+<ul>
+<li>All available ROS nodes, topics, services and parameters are shown in the respective menus. These resources can be dragged onto an existing widget.</li>
+<li>"Widget" menu: Shows all available and loaded widgets. Create a new widget by dragging it from the menu to the free area below the menu.</li>
+<li>Connect button: Click to (re-)connect to the rosbridge server. A menu appears to enter its address, e.g. robot:9090. The current connection state is indicated as follows: green - connected; red - not connected; spinnning - connecting.</li>
+<li>Desktop name: Enter a name to identify desktops. Each desktop has its own set of widgets and may connect to a different server.</li>
+<li>Save button: Saves the current widget configuration as a JSON string both to the server and to the local storage.</li>
+<li>Load button: Open a saved desktop configuration, including widgets, their parameters, positions and the associated ROS resources. A demo file for the server storage is in the repository.</li>
+<li>Forward/backward buttons: Switch between multiple desktops. </li>
+<li>Delete button: Deletes widgets, entries from the storage (by dragging them onto the button) or the current desktop.</li>
+</ul>
+
+<h2>Widgets</h2>
+
+<p>Widgets visualize ROS resources such as messages and are created by dragging from the "Widgets" menu.
+They can be moved and resized like a window.
+After creating a widget, drag the ROS resource (e.g. topic, parameter) you like to show onto the widget.
+The title bar shows buttons for configuration of the widget and its view mode (not supported for all widgets).
+The following widgets are currently available:</p>
+
+<h3>Message widget<span id="messageWidget"></span></h3>
+
+<p><em>Accepts: Any topic (images or large data not recommended)</em></p>
+
+<p>Displays a ROS topic as text, much like <code>rostopic echo</code>.</p>
+
+<h3>Publisher widget<span id="publisherWidget"></span></h3>
+
+<p><em>Accepts: Any topic</em></p>
+
+<p>Publish to a ROS topic.
+The publishing frequency and toggle mode are configurable.
+Use the "view mode" button to switch to a more compact design, which is suitable for simple robot controllers.
+You can show any HTML code in the button, including images and Unicode signs.</p>
+
+<h3>Parameter widget<span id="paramWidget"></span></h3>
+
+<p><em>Accepts: Any parameter</em></p>
+
+<p>Read, create, modify or clear parameters.</p>
+
+<h3>Service widget<span id="serviceWidget"></span></h3>
+
+<p><em>Accepts: Any service</em></p>
+
+<p>Call a ROS service.</p>
+
+<h3>Image widget<span id="imageWidget"></span></h3>
+
+<p><em>Accepts: Topic of type sensor_msgs/Image</em></p>
+
+<p>Displays images/videos using mjpeg_server. The server port must be set in the widget's configuration and defaults to the site's port +1.</p>
+
+<h3>Plot widget<span id="plotWidget"></span></h3>
+
+<p><em>Accepts: Any topic with numeric values</em></p>
+
+<p>Displays a plot using the <a href="http://www.flotcharts.org/">flot</a> library. Individual components of the message can be selected. Use the widget parameters to customize the plot.</p>
+
+<h3>Slider Widget<span id="sliderWidget"></span></h3>
+
+<p><em>Accepts: Any topic with numeric values</em></p>
+
+<p><em>Viewmodes: horizontal, vertical (experimental) sliders</em></p>
+
+<p>Visualizes numeric values of a message using sliders. When dropping a topic, sliders are created for all numeric fields. Delete sliders by dragging them to the paperbin. Range settings can be configured for per slider in the parameters. Flashing can be enabled when a message is received.</p>
+
+<h3>Rosout Widget<span id="rosoutWidget"></span></h3>
+
+<p><em>Accepts: Any node</em></p>
+
+<p>Displays rosout messages related to the dropped nodes. Filters can be used to exclude or highlight messages. To access the filter-settings, press the settings button in the top right corner.</p>
+
+<h2>More information</h2>
+
+<p>Detailed documentation can be created using JSDoc.
+A demo video will be made available shortly.
+If you plan to develop your own widget, or add more features, do not hesitate to contact us.</p>
+
+<p>Authors: Martin Freundl, Nicolas Alt</p>

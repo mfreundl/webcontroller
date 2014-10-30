@@ -3,8 +3,13 @@
 import errno
 import os
 import string
+import sys
 import urllib
 import json
+import cgi
+import cgitb
+
+cgitb.enable();
 
 print("Content-Type:text/html;charset=iso-8859-1\n\n");
 
@@ -20,14 +25,9 @@ for a in range(0, len(result)):
     os.remove(str("./saves/")+result[a]);
 
 
-query = os.environ['QUERY_STRING'];
-query = string.replace(query ,'JSON=', '');
+data = cgi.FieldStorage();
 
-url = urllib.unquote(query)
-obj = json.loads(url);
-
-#print(json.dumps(obj, ensure_ascii=False));
-#print(json.loads(json.dumps(obj, ensure_ascii=False)))
+obj = json.loads(unicode(data['json'].value));
 
 for k,v in obj.items():
   path = str("./saves/") + v['desktop']+'_'+ str(v['stamp']) +'.json';
@@ -35,7 +35,3 @@ for k,v in obj.items():
   f = open(path, 'w');
   f.write(json.dumps(v, ensure_ascii=False));
   f.close();    
-
-#fileee = open("save.txt", "w");
-#fileee.write(query);
-#fileee.close();

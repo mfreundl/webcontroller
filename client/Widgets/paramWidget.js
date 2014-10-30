@@ -22,75 +22,85 @@ widgetList.push("paramWidget");
     
     this.title = "Parameters";
     this.description = "Get and set ROS parameters";
-    
-    // myDiv is inherited by widgetBase and represents the widget's view container.
-    // here it is made droppable to accept elements of the param section of the menu bar.
-    this.myDiv.droppable({
-      accept:'#menuParam li',
-      drop:handleDropParamWidget,
-      hoverClass:'hovered'
-    });
-    
-    
-    
-    
-    
-    /** this is the top dialog of every paramWidget where you can create a new parameter */ 
-    var row = $('<tr></tr>')
-              .appendTo($("<table style='width:100%; table-layout:fixed; background:#cccccc;'></table>")
-              .appendTo($("<div class='view0'></div>").appendTo(that.contentDiv)));
-    
-    /** this points to the input field of the name of the parameter you create your own */          
-    var paramOwnName = $("<input title='paramName' type='text' placeholder='[paramName]'></input>")
-                     .change(function(){$(this).css("background", $(this).val() == "" ? "red" : "green")})
-                     .click(function(){$(this).focus();})
-                     .appendTo($("<td></td>").appendTo(row))
-                     .tooltip();
-                     
-    var paramOwnValue = $("<input title='paramValue' type='text' placeholder='[paramValue]'></input>")
-                 .change(function(){$(this).css("background", $(this).val() == "" ? "red" : "green")})
-                 .click(function(){$(this).focus();})
-                 .appendTo($("<td></td>").appendTo(row))
-                 .tooltip();
-    
-    //here we append the create button to the top row and connect it to an event handler       
-    $("<button class='fa fa-plus-circle' title='Add parameter' />")
-    .click(function(){
-      if(paramOwnName == "" || paramOwnValue == "")
-      {
-        return;
-      }
-      else
-      {
-        handleSetButtonPress({"m_parameterString":"/"+paramOwnName.val(), "m_inputField":$('<input style="width:100%;" type="text" value="">').val(paramOwnValue.val())});
-        insertItems("/"+paramOwnName.val());
-        refreshMenu();
-        
-      }
-      paramOwnName.val("").css("background", "white");
-      paramOwnValue.val("").css("background", "white");
-    })
-    .appendTo($("<td></td>").appendTo(row));
-    
-    /** the table which displays the dropped entries in the widget's view */
-    var paramTable = $('<table class="pTable"></table>').appendTo(this.contentDiv);
+    this.use_viewmodes = 2;
     
     /**
-     * a list of the currently displayed params in the widget
-     * @type {parameterObject[]}
-     */  
-    var insertedElements = new Object();
+     * called by main to trigger the creation of the param widget.
+     * necessary variables are initialized and further processing of the div is done
+     * @method
+     */
+    this.createWidget = function()
+    {
+      //contentDiv is inherited by widgetBase and represents the content container of the widget.
+      //here it is made droppable to accept elements of the param section of the menu bar.
+      that.contentDiv.droppable({
+        accept:'#menuParam li',
+        drop:handleDropParamWidget,
+        hoverClass:'hovered'
+      });
+      
+      //append the input dialog for creating new params on the top of the content-div 
+      createParamCreationRow(); 
+      
+
+      /** the table which displays the dropped entries in the widget's view */
+      that.paramTable = $('<table class="pTable"></table>').appendTo(that.contentDiv);
+      
+      /**
+       * a list of the currently displayed params in the widget
+       * @type {parameterObject[]}
+       */  
+      that.insertedElements = new Object();
+      
+      /**
+       * a list of the names of the currently displayed params in the widget. this list is a property of the contentObject which is stored during a save process
+       * @type {string[]}
+       */  
+      that.contentObject.items = new Array();
+      
+      //loading the widget's content of a previous session if there was one
+      //loadMe(config.content);
+    }
+
     
-    /**
-     * a list of the names of the currently displayed params in the widget. this list is a property of the contentObject which is stored during a save process
-     * @type {string[]}
-     */  
-    that.contentObject.items = new Array();
-    
-    //loading the widget's content of a previous session if there was one
-    loadMe(config.content);
-    
-    
+    function createParamCreationRow()
+    {
+      /** this is the top dialog of every paramWidget where you can create a new parameter */ 
+      var row = $('<tr></tr>')
+                .appendTo($("<table style='width:100%; table-layout:fixed; background:#cccccc;'></table>")
+                .appendTo($("<div class='view0'></div>").appendTo(that.contentDiv)));
+      
+      /** this points to the input field of the name of the parameter you create your own */          
+      var paramOwnName = $("<input title='paramName' type='text' placeholder='[paramName]'></input>")
+                       .change(function(){$(this).css("background", $(this).val() == "" ? "red" : "green")})
+                       .appendTo($("<td></td>").appendTo(row))
+                       .tooltip();
+                       
+      var paramOwnValue = $("<input title='paramValue' type='text' placeholder='[paramValue]'></input>")
+                   .change(function(){$(this).css("background", $(this).val() == "" ? "red" : "green")})
+                   .appendTo($("<td></td>").appendTo(row))
+                   .tooltip();
+      
+      //here we append the create button to the top row and connect it to an event handler       
+      $("<button class='fa fa-plus-circle' title='Add parameter' />")
+      .click(function(){
+        if(paramOwnName == "" || paramOwnValue == "")
+        {
+          return;
+        }
+        else
+        {
+          handleSetButtonPress({"m_parameterString":"/"+paramOwnName.val(), "m_inputField":$('<input style="width:100%;" type="text" value="">').val(paramOwnValue.val())});
+          insertItems("/"+paramOwnName.val(), true);
+          console.log("test");
+          that.mainPointer.refreshMenu(that.mainPointer.desktopHandle.data("ros"));
+          
+        }
+        paramOwnName.val("").css("background", "white");
+        paramOwnValue.val("").css("background", "white");
+      })
+      .appendTo($("<td></td>").appendTo(row));
+    }
 
     
     /**
@@ -103,6 +113,9 @@ widgetList.push("paramWidget");
       //write code to tidy things of this widget up before deleting its div
       console.log("done");
       that.myRosHandle.close();
+      
+      //the documentation of colresizable says to disable their functionality before removing the table from the DOM
+      try {that.paramTable.colResizable({disable: true});} catch(e) {console.log(e);}
     }
     
     /**
@@ -112,12 +125,23 @@ widgetList.push("paramWidget");
      * @param {Object} content - the widget's contentObject that has been saved from a previous session (if not set, the method does nothing and the widget stays empty)
      * @method
      */
-    function loadMe(content)
+    //function loadMe(content)
+    //{
+      //if(content)
+      //{
+        //$.each(content.items, function(key, value){
+          //insertItems(value);
+        //});
+      //}
+    //}
+    
+    //should analize the items in the list and create or delete html according to the items
+    this.render = function()
     {
-      if(content)
+      if(that.contentObject)
       {
-        $.each(content.items, function(key, value){
-          insertItems(value);
+        $.each(that.contentObject.items, function(key, value){
+          insertItems(value, false);
         });
       }
     }
@@ -132,35 +156,50 @@ widgetList.push("paramWidget");
     function handleDropParamWidget( event, ui )
     {
       var draggable = ui.draggable;
-        if(insertedElements[draggable.data('value')])
+        if(that.insertedElements[draggable.data('value')])
         {
           return;
         }
-        insertItems(draggable.data('value'));
+        insertItems(draggable.data('value'), true);
     }
     
     /**
      * insertItems() takes the name of the parameter, creates an object of parameterObject and displays its view in the widget's view table.
-     * furthermore the parameterObject gets stored in the list of insertedElements and the name of the parameter gets stored into the content object.
+     * furthermore the parameterObject gets stored in the list of items and the name of the parameter gets stored into the content object.
      * the call of parameterObject.m_createMe() in the last line creates the helper object's view and appends it to the widget's view table.
      * @param {string} paraString - the name of the parameter to display
      * @method
      */    
-    function insertItems(paraString)
+    function insertItems(paraString, updating)
     {
+        $("#help", that.contentDiv).remove();
         var myParameter = new parameterObject(paraString);
-        insertedElements[paraString] = myParameter;
+        that.insertedElements[paraString] = myParameter;
         
+        //console.log(insertedElements);
+        myParameter.m_createMe();  //TODO: hier kommt render() ins spiel, model emitted event -> render() updated view
+        
+        try
+        {
+          that.paramTable.colResizable({disable :true});
+        }
+        catch(e)
+        {
+          console.log(e);
+        }
+        that.paramTable.colResizable({liveDrag :true,
+                                  gripInnerHtml:"<div class='fa fa-chevron-down'></div>"});
+                                  
+        //when loading a session, we do not have to update the itemlist of contentObject, because no other item was added
+        if(!updating)
+        {
+          return;
+        }
         that.contentObject.items = [];
-        for(prop in insertedElements)
+        for(prop in that.insertedElements)
         {
           that.contentObject.items.push(prop);
         }
-        
-        console.log(insertedElements);
-        myParameter.m_createMe();
-        
-        paramTable.colResizable({'liveDrag':true});
     }
     
 
@@ -182,7 +221,7 @@ widgetList.push("paramWidget");
       this.m_inputField;
       //this.m_container = $("<tr></tr>").appendTo($('<table style="table-layout:fixed;width:100%;"></table>').appendTo(paramDiv));
       /** stores the pointer to the view of this parameterObject which is appended to the view table of the widget */
-      this.m_container = $("<tr></tr>").appendTo(paramTable);
+      this.m_container = $("<tr></tr>").appendTo(that.paramTable);
       /**
        * this method sets up the view of this parameterObject.
        * it gets the parameter's value by contacting the ROS system and connects the event handlers to the buttons.
@@ -194,7 +233,7 @@ widgetList.push("paramWidget");
         
         $('<td>'+this.m_parameterString+'</td>').appendTo(this.m_container);
         
-        this.m_inputField = $('<input style="width:100%;" type="text" value="">').click(function(){$(this).focus();});
+        this.m_inputField = $('<input type="text" value="">');
         that.getParamValueByString(that.myRosHandle, this.m_parameterString, function(result){
           currentObj.m_inputField[0].value = result;
         });
@@ -212,23 +251,23 @@ widgetList.push("paramWidget");
 
     /**
      * the event handler of the remove button.
-     * it removes the parameterObject from both arrays insertedElements and contentObject.items
+     * it removes the parameterObject from items list
      * then it removes the parameterObject's view from the widget's view table.
      * @param {parameterObject} paraObj - the desired parameterObject to remove.
      * @method
      */
     function handleRemoveButtonPress(paraObj)
     {
-      paraObj.m_container.remove();
-      delete insertedElements[paraObj.m_parameterString];
+      paraObj.m_container.remove();  //TODO: aufgabe von render(), model emitted event -> render() updates view
+      delete that.insertedElements[paraObj.m_parameterString];
       
         that.contentObject.items = [];
-        for(prop in insertedElements)
+        for(prop in that.insertedElements)
         {
           that.contentObject.items.push(prop);
         }
       
-      $.each(insertedElements, function(key, value){
+      $.each(that.insertedElements, function(key, value){
         console.log(key);
       });
     }

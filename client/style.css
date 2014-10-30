@@ -15,6 +15,7 @@
 	body {margin: 0; font-family: sans-serif; min-height:100%;}
 	ul { padding-left:15px;}
 	td { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-size:10px;}
+	input, button {z-index:999;}
 	.active { background: red; }
 
 /*** SiteContent - root div within body ***/
@@ -76,29 +77,30 @@
 	#controlBox input:focus {
 		border-color: #f80;
 	}
-
-	#connMen { position: relative;}
 	
-	#connMenContent {
+	#connectionMenuContent {
 		display:none;
 		position: absolute;
 		width: 250px;
 		float: right;
 		top: 40px;
-		right: 0px;
-		padding: 5px;
+		right: -10px;
+		padding: 10px;
 		text-align: right;
 	}
 
-	#connMen:hover #connMenContent {display:block;}
-
+  #connectionMenu { position: relative;}
+	#connectionMenu:hover #connectionMenuContent {display:block;}
+  
+  #loadMenuContent {display:none;}
+  #loadMenu:hover #loadMenuContent {display:block;}
 
 /*** Widget window ***/
 	.widget { position:absolute; border:0 solid black; width:300px; height:300px;
 		min-width: 100px; min-height: 100px;
 		z-index: 100; }
 
-	.widget #title { position: absolute; left:0; top: 0; width:100%; height:29px;
+	.widget #title { position: absolute; left:0; top: 0; width:100%; height:35px;
 		background: #dde;
 		border-radius: 10px 10px 0 0;
 		border-bottom: 1px solid white;
@@ -108,30 +110,81 @@
 	.widget #title h2 {
 		position: absolute; left:0; top: 0;
 		margin-left: 10px; margin-top: 0; margin-bottom: 0;
-		line-height: 29px;
+		line-height: 35px;
 	}
 
 	.widget #title #buttons { position: absolute; right: 0; top: 0; margin-right: 10px; z-index: 1;}
-	.widget #title button { height: 29px; width: 29px; margin-left: 5px;
-		border-width: 0; background-color: #ccd;
+	.widget #title button { height: 35px; width: 35px; margin-left: 5px;
+		border-width: 0; background-color: #ccd; z-index: 999;
 		/*border-left: 1px solid gray; border-right: 1px solid gray; border-top: none; border-bottom: none;*/
 		}
 
-	.widget #content { position: absolute; left:0; top: 30px; bottom: 0; width:100%;
-		background: #eee; box-shadow: 3px 3px 3px 0 #ccc; overflow: auto; }
+	.widget #content { position: absolute; left:0; top: 36px; bottom: 0; width:100%;
+		background: #eee; box-shadow: 3px 3px 3px 0 #ccc; overflow-y: auto; overflow-x: hidden; }
 
 /*** View mode definitions; elements with viewN are only shown in view mode N ***/
 	.view_top0 .view1, .view_top0 .view2 { display: none; }
 	.view_top1 .view0, .view_top1 .view2 { display: none; }
 	.view_top2 .view0, .view_top2 .view1 { display: none; }
 
+/*** Generic elements ***/
+.tl { position: absolute; top:0; left:0;}
+.tr { position: absolute; top:0; right:0;}
+.bl { position: absolute; bottom:0; left:0;}
+.br { position: absolute; bottom:0; right:0;}
+
+.weak { color: #888; }
+
+ /*** Animation ***/
+ @-webkit-keyframes flash { 0% { background-color: yellow; }
+    50% { background-color: yellow; }
+    100%   { background-color: none; }  }
+.flash { -webkit-animation-name: flash;
+    -webkit-animation-duration: 500ms;
+    -webkit-animation-iteration-count: 1;
+    -webkit-animation-timing-function: normal;  }
+ @-webkit-keyframes fadeout { 0% { opacity: 100%;  }
+    50% { height: inherit; opacity: 50%; }
+    100%   { height: 0; opacity: 0.2; }  }
+.fadeout { -webkit-animation-name: fadeout;
+    -webkit-animation-duration: 5000ms;
+    -webkit-animation-iteration-count: 1;
+    -webkit-animation-timing-function: normal;  } 
+
+/*** Generic rule for deletebale items in widgets. Currently only sliderWidget ***/
+.deleteableEntry.ui-draggable-dragging { height: 44px; width: 200px; border-radius: 15px; overflow: hidden; border: 3px red solid; background-color: #888; z-index: 1500; }
+
 /*** Specific Widgets ***/
 	.paramWidget .pTable { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; width:100%; }
+	.paramWidget .pTable input {width:80%;margin-left:10%;margin-right:10%;}
 	#.paramWidget .pTable tr td:first-child { max-width: 90px; }
 	#.paramWidget .pTable tr td:last-child { width: 90px; }
 
   .serviceWidget .sTable {white-space:nowrap; overflow:hidden; text-overflow:ellipsis; width:100%; }
   .serviceWidget .sTable .headRow td {max-width: 90px;}
+
+  .slidercontainer { position: relative; height:48px; margin: 3px 8px 3px 8px; 
+  	border-bottom: 1px solid white;}
+  .slidercontainer #slider { position: absolute; margin: auto; top:0; left:0; right:0; bottom:0;}
+  .slidercontainer .ui-state-default { background: #f90; border: 1px solid #d70; }
+  /* Rotate slider containers; experimental */
+  .view_top1 .slidercontainer { -webkit-transform: rotate(-90deg);
+  	display: inline-block; float:left;
+  	width:248px; margin: 105px -100px 105px -100px;
+  }
+
+
+	#rosoutTable {white-space:nowrap; overflow:hidden; text-overflow:ellipsis; width:100%;}
+	#rosoutTable td {text-align:left;}
+	#rosoutTable th {font-size:10px; background:#ccc}
+	
+  .rosout_number {width:5%;}
+  .rosout_message {width:50%;}
+  .rosout_stamp {width:10%;}
+  .rosout_level {width:10%;}
+  .rosout_node {width:10%;}
+  .rosout_topics {width:15%;}
+
 
 
 /*** Property Window Styling ***/
@@ -157,3 +210,15 @@
 	ul.properties li .val input {
 		width: 100%;
 	}
+	
+	
+	
+	
+	.dragWidgetClass {
+	  border: 1px solid black;
+	}
+	
+	
+	.notBoxHead { width:100%; height:20px; position:absolute; background:#ddd; font:16px arial; text-align:center;}
+	.notificationBox { width:300px; height:200px; border-top:1px solid black; border-left:1px solid black;z-index:999; position:absolute; bottom:0px; right:0px;}
+	.notificationBox textarea { width:100%; height:100%; background:#eee; font:10px arial; padding:5px; padding-top:25px;}
